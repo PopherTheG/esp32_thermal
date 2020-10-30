@@ -14,7 +14,7 @@
 #define TAG     "thermal"
 
 #define MUTEX_TIMEOUT_MS    50
-#define IR_MUTEX_LOCK()     xSemaphoreTake(ir_mutex, pdMS_TO_TICKS(MUTEX_TIMEOUT_MS));
+#define IR_MUTEX_LOCK()     xSemaphoreTake(ir_mutex, pdMS_TO_TICKS(MUTEX_TIMEOUT_MS))
 #define IR_MUTEX_UNLOCK()   xSemaphoreGive(ir_mutex)
 
 #define PIN_NUM_MISO 12
@@ -109,9 +109,11 @@ int init_thermal(ir_app_cb event_handler) {
     esp_err = spi_bus_add_device(HSPI_HOST, &devcfg, &spi);
     if(esp_err == OK) {
         ir_present = 1;
+        ESP_LOGI(TAG, "IR AVAILABLE ESP_OK");
     } else {
         ret =  ERROR;
-    }        
+        return ret;
+    }    
 
     gpio_set_level(PIN_NUM_CS, 0);
     vTaskDelay(150/portTICK_RATE_MS);
@@ -123,7 +125,7 @@ int init_thermal(ir_app_cb event_handler) {
         ir_event_t event = {0};
         event.id = IR_EVENT_WAKEUP_FAIL;
         app_event_handler(&event);
-        ret = ERROR;
+        return ERROR;
     } else {
         ir_event_t event = {0};
         event.id = IR_EVENT_WAKEUP_SUCCESS;
@@ -135,7 +137,7 @@ int init_thermal(ir_app_cb event_handler) {
         ir_event_t event = {0};
         event.id = IR_EVENT_INIT_FAIL;
         app_event_handler(&event);
-        ret = ERROR;
+        return ERROR;
     } else {
         ir_event_t event = {0};
         event.id = IR_EVENT_INIT_SUCCES;
