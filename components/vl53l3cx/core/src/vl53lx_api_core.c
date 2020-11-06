@@ -1880,7 +1880,15 @@ VL53LX_Error VL53LX_init_and_start_range(
 
 
 
-	if (status == VL53LX_ERROR_NONE) {
+	if (status == VL53LX_ERROR_NONE) {		
+#if 0
+		uint8_t i;
+		printf( "Multiple Write: index=%d, size=%d \n", i2c_index, i2c_buffer_size_bytes);	
+		for (i = 0; i<i2c_buffer_size_bytes; i++) {
+			printf("%02x ", buffer[i]);
+		}
+		printf("\n");
+#endif
 		status =
 			VL53LX_WriteMulti(
 				Dev,

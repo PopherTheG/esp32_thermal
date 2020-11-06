@@ -27,192 +27,6 @@ SSD1306_Error_t ssd1306_fill_buffer(uint8_t *buf, uint32_t len)
     return ret;
 }
 
-static void configure_oled(void)
-{
-    ssd1306_write_command(0x8D); //OLED_CMD_SET_CHARGE_PUMP
-    ssd1306_write_command(0x14);
-
-    ssd1306_write_command(0xA1); //OLED_CMD_SET_SEGMENT_REMAP
-    ssd1306_write_command(0xC8); //OLED_CMD_SET_COM_SCAN_MODE
-
-    ssd1306_write_command(0xAF); //Display On
-}
-
-void task_ssd1306_scroll(void *ignore)
-{
-    esp_err_t espRc;
-
-    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-    i2c_master_start(cmd);
-
-    i2c_master_write_byte(cmd, SSD1306_I2C_ADDR | I2C_MASTER_WRITE, true);
-    i2c_master_write_byte(cmd, BYTE_CMD_STREAM, true);
-
-    i2c_master_write_byte(cmd, 0x29, true); // vertical and horizontal scroll (p29)
-    i2c_master_write_byte(cmd, 0x00, true);
-    i2c_master_write_byte(cmd, 0x00, true);
-    i2c_master_write_byte(cmd, 0x07, true);
-    i2c_master_write_byte(cmd, 0x01, true);
-    i2c_master_write_byte(cmd, 0x3F, true);
-
-    i2c_master_write_byte(cmd, 0xA3, true); // set vertical scroll area (p30)
-    i2c_master_write_byte(cmd, 0x20, true);
-    i2c_master_write_byte(cmd, 0x40, true);
-
-    i2c_master_write_byte(cmd, 0x2F, true); // activate scroll (p29)
-
-    i2c_master_stop(cmd);
-    espRc = i2c_master_cmd_begin(I2C_NUM_0, cmd, 10 / portTICK_PERIOD_MS);
-    if (espRc == ESP_OK)
-    {
-        // ESP_LOGI(tag, "Scroll command succeeded");
-    }
-    else
-    {
-        // ESP_LOGE(tag, "Scroll command failed. code: 0x%.2X", espRc);
-    }
-
-    i2c_cmd_link_delete(cmd);
-
-    vTaskDelete(NULL);
-}
-
-void task_ssd1306_contrast(void *ignore)
-{
-    i2c_cmd_handle_t cmd;
-
-    uint8_t contrast = 0;
-    uint8_t direction = 1;
-    while (true)
-    {
-        cmd = i2c_cmd_link_create();
-        i2c_master_start(cmd);
-        i2c_master_write_byte(cmd, SSD1306_I2C_ADDR | I2C_MASTER_WRITE, true);
-        i2c_master_write_byte(cmd, BYTE_CMD_STREAM, true);
-        i2c_master_write_byte(cmd, 0x81, true);
-        i2c_master_write_byte(cmd, contrast, true);
-        i2c_master_stop(cmd);
-        i2c_master_cmd_begin(I2C_NUM_0, cmd, 10 / portTICK_PERIOD_MS);
-        i2c_cmd_link_delete(cmd);
-        vTaskDelay(1 / portTICK_PERIOD_MS);
-
-        contrast += direction;
-        if (contrast == 0xFF)
-        {
-            direction = -1;
-        }
-        if (contrast == 0x0)
-        {
-            direction = 1;
-        }
-    }
-    vTaskDelete(NULL);
-}
-
-void task_ssd1306_display_text(const void *arg_text)
-{
-    char *text = (char *)arg_text;
-    uint8_t text_len = strlen(text);
-
-    i2c_cmd_handle_t cmd;
-
-    uint8_t cur_page = 0;
-    cmd = i2c_cmd_link_create();
-    i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, SSD1306_I2C_ADDR | I2C_MASTER_WRITE, true);
-
-    i2c_master_write_byte(cmd, 0x00, true);
-    i2c_master_write_byte(cmd, 0x00, true); // reset column
-    i2c_master_write_byte(cmd, 0x10, true);
-    i2c_master_write_byte(cmd, 0xB0 | cur_page, true);
-
-    i2c_master_stop(cmd);
-    i2c_master_cmd_begin(SSD1306_I2C_PORT, cmd, 10 / portTICK_PERIOD_MS);
-    i2c_cmd_link_delete(cmd);
-
-    for (uint8_t i = 0; i < text_len; i++)
-    {
-        if (text[i] == '\n')
-        {
-            cmd = i2c_cmd_link_create();
-            i2c_master_start(cmd);
-            i2c_master_write_byte(cmd, SSD1306_I2C_ADDR | I2C_MASTER_WRITE, true);
-
-            i2c_master_write_byte(cmd, 0x00, true);
-            i2c_master_write_byte(cmd, 0x00, true); // reset column
-            i2c_master_write_byte(cmd, 0x10, true);
-            i2c_master_write_byte(cmd, 0xB0 | ++cur_page, true); // increment page
-
-            i2c_master_stop(cmd);
-            i2c_master_cmd_begin(SSD1306_I2C_PORT, cmd, 10 / portTICK_PERIOD_MS);
-            i2c_cmd_link_delete(cmd);
-        }
-        else
-        {
-            cmd = i2c_cmd_link_create();
-            i2c_master_start(cmd);
-            i2c_master_write_byte(cmd, SSD1306_I2C_ADDR | I2C_MASTER_WRITE, true);
-
-            i2c_master_write_byte(cmd, 0x40, true);
-            i2c_master_write(cmd, font8x8_basic_tr[(uint8_t)text[i]], 8, true);
-
-            i2c_master_stop(cmd);
-            i2c_master_cmd_begin(SSD1306_I2C_PORT, cmd, 10 / portTICK_PERIOD_MS);
-            i2c_cmd_link_delete(cmd);
-        }
-    }
-
-    vTaskDelete(NULL);
-}
-
-void task_ssd1306_display_clear(void *ignore)
-{
-    i2c_cmd_handle_t cmd;
-
-    uint8_t zero[128];
-
-    for (uint8_t i = 0; i < 8; i++)
-    {
-        cmd = i2c_cmd_link_create();
-        i2c_master_start(cmd);
-        i2c_master_write_byte(cmd, SSD1306_I2C_ADDR | I2C_MASTER_WRITE, true);
-        i2c_master_write_byte(cmd, 0x80, true);
-        i2c_master_write_byte(cmd, 0xB0 | i, true);
-
-        i2c_master_write_byte(cmd, 0x40, true);
-        i2c_master_write(cmd, zero, 128, true);
-        i2c_master_stop(cmd);
-        i2c_master_cmd_begin(SSD1306_I2C_PORT, cmd, 100 / portTICK_PERIOD_MS);
-        i2c_cmd_link_delete(cmd);
-    }
-
-    vTaskDelete(NULL);
-}
-
-void task_ssd1306_display_pattern(void *ignore)
-{
-    i2c_cmd_handle_t cmd;
-
-    for (uint8_t i = 0; i < 8; i++)
-    {
-        cmd = i2c_cmd_link_create();
-        i2c_master_start(cmd);
-        i2c_master_write_byte(cmd, SSD1306_I2C_ADDR | I2C_MASTER_WRITE, true);
-        i2c_master_write_byte(cmd, BYTE_CMD_STREAM, true);
-        i2c_master_write_byte(cmd, 0xB0 | i, true);
-        i2c_master_write_byte(cmd, BYTE_DATA_STREAM, true);
-        for (uint8_t j = 0; j < 128; j++)
-        {
-            i2c_master_write_byte(cmd, 0xFF >> (j % 8), true);
-        }
-        i2c_master_stop(cmd);
-        i2c_master_cmd_begin(I2C_NUM_0, cmd, 10 / portTICK_PERIOD_MS);
-        i2c_cmd_link_delete(cmd);
-    }
-
-    vTaskDelete(NULL);
-}
-
 void ssd1306_write_command(uint8_t byte)
 {
     esp_err_t err;
@@ -227,10 +41,8 @@ void ssd1306_write_command(uint8_t byte)
 
     if (err != ESP_OK)
     {
-        ESP_LOGE(TAG, "error here %d", err);
-        // ESP_ERROR_CHECK(err);
-    }
-    // return err == ESP_OK;
+        ESP_LOGE(TAG, "error here %d", err);        
+    }    
 }
 
 void ssd1306_write_data(uint8_t *data, size_t len)
@@ -249,8 +61,6 @@ void ssd1306_write_data(uint8_t *data, size_t len)
     {
         ESP_LOGE(TAG, "error here %d", err);
     }
-
-    // return err == ESP_OK;
 }
 
 void ssd1306_set_display_on(const uint8_t on)
@@ -303,7 +113,6 @@ void ssd1306_update_screen(void)
 
 void ssd1306_init(void)
 {
-
     ssd1306_set_display_on(0); //display off
 
     ssd1306_write_command(0x20); // set memorry addressing mode

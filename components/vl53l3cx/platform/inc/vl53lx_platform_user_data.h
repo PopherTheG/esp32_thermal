@@ -30,10 +30,7 @@
  CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
  OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
 */
-
-
 
 #ifndef _VL53LX_PLATFORM_USER_DATA_H_
 #define _VL53LX_PLATFORM_USER_DATA_H_
@@ -50,16 +47,12 @@ extern "C"
 #endif
 
 
-
-
-
 typedef struct {
-
 	VL53LX_DevData_t   Data;
 	uint8_t   i2c_slave_address;
 	uint8_t   comms_type;
-	uint16_t  comms_speed_khz;	
-
+	uint16_t  comms_speed_khz;
+	uint8_t  pin_num;
 } VL53LX_Dev_t;
 
 
@@ -78,5 +71,3 @@ typedef VL53LX_Dev_t *VL53LX_DEV;
 #endif
 
 #endif
-
-

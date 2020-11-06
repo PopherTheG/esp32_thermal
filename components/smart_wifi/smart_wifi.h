@@ -1,0 +1,6 @@
+#ifndef COMPONENTS_SMART_WIFI_SMART_WIFI
+#define COMPONENTS_SMART_WIFI_SMART_WIFI
+
+void initialise_wifi(void);
+
+#endif /* COMPONENTS_SMART_WIFI_SMART_WIFI */

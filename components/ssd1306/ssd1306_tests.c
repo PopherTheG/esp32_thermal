@@ -48,8 +48,8 @@ void ssd1306_TestFonts()
 void ssd1306_TestAll()
 {
     ssd1306_init();
-    // ssd1306_TestFonts();
+    ssd1306_TestFonts();
     // ssd1306_TestLine();
     // ssd1306_TestRectangle();
-    ssd1306_TestCircle();
+    // ssd1306_TestCircle();
 }

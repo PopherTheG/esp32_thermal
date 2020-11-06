@@ -406,8 +406,6 @@ VL53LX_Error VL53LX_SetDistanceMode(VL53LX_DEV Dev,
 
 	LOG_FUNCTION_START("%d", (int)DistanceMode);
 
-
-
 	if ((DistanceMode != VL53LX_DISTANCEMODE_SHORT) &&
 		(DistanceMode != VL53LX_DISTANCEMODE_MEDIUM) &&
 		(DistanceMode != VL53LX_DISTANCEMODE_LONG))
