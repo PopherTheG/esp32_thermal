@@ -11,12 +11,12 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 
-#include "cloud_api.h"
 #include "smart_wifi.h"
 
 #define TAG "wifi-app"
 
 static EventGroupHandle_t s_wifi_event_group;
+static smart_wifi_app_cb app_layer_cb;
 
 static const int CONNECTED_BIT = BIT0;
 static const int ESPTOUCH_DONE_BIT = BIT1;
@@ -63,50 +63,6 @@ static esp_err_t load_config_from_nvs(wifi_config_t *config)
     return err;
 }
 
-static void cloud_cb(cloud_event_t *evt)
-{
-    static int retries = 0;
-    switch (evt->id)
-    {
-    case CLOUD_EVT_CONNECT:
-        ESP_LOGI(TAG, "Connected to Cloud!");
-        break;
-
-    case CLOUD_EVT_DISCONNECT:
-        ESP_LOGI(TAG, "CLOUD_EVT_DISCONNECT");
-        break;
-
-    case CLOUD_EVT_RECONNECT:
-        ESP_LOGI(TAG, "CLOUD_EVT_RECONNECT");
-        break;
-
-    case CLOUD_EVT_DATA_MQTT:
-        ESP_LOGI(TAG, "CLOUD_EVT_DATA_MQTT");
-        break;
-
-    default:
-        ESP_LOGI(TAG, "UNKNOW CLOUD EVENT");
-        break;
-    }
-}
-
-static void connect_to_cloud(void)
-{
-    cloud_api_init(cloud_cb, CLOUD_TYPE_MQTT);
-    cloud_api_set_mqtt_id("esp_thermal_client");
-
-    cloud_ret_t cloud_ret = cloud_api_connect_host("mq.xeleqt.com", 1883);
-
-    if (cloud_ret == CLOUD_RET_OK)
-    {
-        ESP_LOGI(TAG, "Cloud Connected\r\n");
-    }
-    else if (cloud_ret == CLOUD_RET_UNKNOWN_PROTOCOL)
-    {
-        ESP_LOGI(TAG, "Cloud Unknown Protocol\r\n");
-    }
-}
-
 static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
 {
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
@@ -129,7 +85,9 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
     {
         ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
         ESP_LOGI(TAG, "Got ip:" IPSTR, IP2STR(&event->ip_info.ip));
-        connect_to_cloud();
+        smart_wifi_event_t smart_wifi_event = {0};
+        smart_wifi_event.id = EVT_CONNECT;
+        app_layer_cb(&smart_wifi_event);
         xEventGroupSetBits(s_wifi_event_group, CONNECTED_BIT);
     }
     else if (event_base == SC_EVENT && event_id == SC_EVENT_SCAN_DONE)
@@ -187,12 +145,11 @@ static void smartconfig_task(void *parm)
     while (1)
     {
         uxBits = xEventGroupWaitBits(s_wifi_event_group, CONNECTED_BIT | ESPTOUCH_DONE_BIT, true, false, portMAX_DELAY);
-        if (uxBits & CONNECTED_BIT)
-        {
+        if (uxBits & CONNECTED_BIT) {
             ESP_LOGI(TAG, "WiFi Connected to ap");
         }
-        if (uxBits & ESPTOUCH_DONE_BIT)
-        {
+
+        if (uxBits & ESPTOUCH_DONE_BIT) {
             ESP_LOGI(TAG, "smartconfig over");
             esp_smartconfig_stop();
             vTaskDelete(NULL);
@@ -200,8 +157,9 @@ static void smartconfig_task(void *parm)
     }
 }
 
-void initialise_wifi(void)
+void initialise_wifi(smart_wifi_app_cb app_cb)
 {
+    app_layer_cb = app_cb;
     ESP_LOGI(TAG, "WIFI Init");
     wifi_config_t sta_config = {0};
 

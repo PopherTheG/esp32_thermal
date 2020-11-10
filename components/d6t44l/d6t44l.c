@@ -2,26 +2,64 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdbool.h>
+#include <math.h>
+
 #include "esp_log.h"
 #include "driver/i2c.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
+
 #include "d6t44l.h"
 #include "ssd1306.h"
-#include <math.h>
 
-#define WRITE_ADDR ((D6T_ADDR << 1) | I2C_MASTER_WRITE)
-#define READ_ADDR ((D6T_ADDR << 1) | I2C_MASTER_READ)
+#define TAG "d6t44l-app"
+
+#define MUTEX_TIMEOUT_MS 50
+
+#define TOF_MUTEX_LOCK() xSemaphoreTake(tof_mutex, pdMS_TO_TICKS(MUTEX_TIMEOUT_MS))
+#define TOF_MUTEX_UNLOCK() xSemaphoreGive(tof_mutex)
+
+#define Txl_1 32.3 //DC1 = Txl_1
+#define Txh 38.4
+double data_1[16] =
+    {31.72, 31.63, 31.62, 31.61,
+     31.51, 31.54, 31.61, 31.52,
+     31.54, 31.75, 31.74, 31.72,
+     32.51, 32.57, 32.51, 31.72};
+double data_2[16] =
+    {38.24, 38.13, 38.12, 38.21,
+     38.01, 38.02, 38.11, 38.04,
+     38.04, 38.06, 38.24, 37.33,
+     38.13, 37.91, 38.01, 38.32};
+
+#define Txl_3 32.7
+#define PTAT_1 25.5
+#define PTAT_3 35.3
+double data_3[16] =
+    {31.42, 31.43, 31.32, 31.31,
+     31.21, 31.24, 31.41, 31.32,
+     31.34, 31.45, 31.24, 31.32,
+     31.51, 31.47, 31.41, 31.32};
+double data_calib_3[16] = {0};
 
 uint8_t rbuf[N_READ];
 double pix_data[N_PIXEL];
 
-static void updateScreen(int16_t temp) {
-    char str[20];
+static uint8_t run_flag = 0;
+// static double current_temp = 0.0;
+static SemaphoreHandle_t tof_mutex;
+static d6t44l_app_cb user_callback = NULL;
 
-    sprintf(str, "%d C", temp);
+static double temp[SAMPLING] = {0};
+
+static void updateScreen(double temp)
+{
+    char str[10];
+
+    sprintf(str, "%04.1f C", temp);
     ssd1306_fill(Black);
-    ssd1306_set_cursor(20, 20);
+    ssd1306_set_cursor(15, 38);
 
     ssd1306_write_string(str, Font_16x26, White);
     ssd1306_update_screen();
@@ -114,7 +152,11 @@ static int i2c_read(uint8_t *val, size_t len)
 
 static void d6t_app_task(void)
 {
-    while (1)
+    int16_t ptat = 0;
+    int8_t count = 0;
+    int16_t itemp = 0;
+
+    while (run_flag)
     {
         memset(rbuf, 0, N_READ);
         int i, j;
@@ -127,40 +169,144 @@ static void d6t_app_task(void)
         {
             if (!D6T_checkPEC(rbuf, N_READ - 1))
             {
-                int16_t itemp = conv8us_s16_le(rbuf, 0);           
-                // ESP_LOGI(__FUNCTION__, "PTAT: %4.1f [degC], Temperature: ", itemp / 10.0);
-                int16_t hTemp = 0;
-                for ( i = 0, j = 2; i < N_PIXEL; i++, j+=2 ) {
-                   int16_t temp = conv8us_s16_le(rbuf, j) / 10.0;
-                   pix_data[i] = temp;
-                   if (temp > hTemp) {
-                       hTemp = temp;
-                   }
+                ptat = conv8us_s16_le(rbuf, 0);
+#ifdef DEBUG
+                ESP_LOGI(TAG, "PTAT: %4.1f [degC], Temperature: ", ptat / 10.0);
+#endif
+                double hTemp = 0.0;
+                for (i = 0, j = 2; i < N_PIXEL; i++, j += 2)
+                {
+                    itemp = (float)conv8us_s16_le(rbuf, j);
+#ifdef DEBUG
+                    printf("%4.1f", itemp / 10.0);
+                    if((i % N_ROW) == N_ROW - 1) 
+                        printf("\n");
+                    else
+                        printf(", ");
+#endif
+
+#ifdef CALIBRATE
+                    pix_data[i] = (((double)itemp) / 10.0 - data_1[i]) * ((double)Txh - (double)Txl_1) / (data_2[i] - data_1[i]) + (double)Txl_1;
+                    pix_data[i] = pix_data[i] - (((double)ptat) / 10.0 - (double)PTAT_1) * (data_calib_3[i] - (double)Txl_3) / ((double)PTAT_3 - (double)PTAT_1);
+#else
+                    pix_data[i] = itemp / 10.0;
+#endif
+                    if (pix_data[i] > hTemp)
+                    {
+                        hTemp = pix_data[i];
+                    }
                 }
 
-                // ESP_LOGI(__FUNCTION__, "Highest Temp: %f", floor(hTemp));
-                updateScreen(hTemp);
+                temp[count] = hTemp;
+                count += 1;
             }
-        }
+        }        
 
-        vTaskDelay(500 / portTICK_RATE_MS);
+        if (count == SAMPLING)
+        {
+            d6t44l_event_t event = {0};
+            event.id = TEMP_EVT_DATA_READY;
+            user_callback(&event);
+        }
     }
+    vTaskDelete(NULL);
 }
 
-void app_run(void)
+void D6T44_update_temp(void)
 {
+    TOF_MUTEX_LOCK();
+    gpio_set_level(LED_BLUE, 0);
+
+    int i;
+    double htemp = 0.0;
+    for (i = 0; i < SAMPLING; i++)
+    {
+        if (temp[i] > htemp)
+        {
+            htemp = temp[i];
+        }
+    }
+
+    updateScreen(htemp);
+
+    if (htemp >= TEMPERATURE_THRESHOLD)
+    {
+        gpio_set_level(LED_RED, 1);
+
+        gpio_set_level(BUZZER_IO, 1);
+        vTaskDelay(250 / portTICK_RATE_MS);
+        gpio_set_level(BUZZER_IO, 0);
+        vTaskDelay(250 / portTICK_RATE_MS);
+        gpio_set_level(BUZZER_IO, 1);
+        vTaskDelay(250 / portTICK_RATE_MS);
+        gpio_set_level(BUZZER_IO, 0);
+        vTaskDelay(250 / portTICK_RATE_MS);
+        gpio_set_level(BUZZER_IO, 1);
+        vTaskDelay(250 / portTICK_RATE_MS);
+        gpio_set_level(BUZZER_IO, 0);
+        vTaskDelay(250 / portTICK_RATE_MS);
+        gpio_set_level(BUZZER_IO, 1);
+        vTaskDelay(250 / portTICK_RATE_MS);
+        gpio_set_level(BUZZER_IO, 0);
+    }
+    else
+    {
+        gpio_set_level(LED_GREEN, 1);
+        gpio_set_level(BUZZER_IO, 1);
+        vTaskDelay(250 / portTICK_RATE_MS);
+        gpio_set_level(BUZZER_IO, 0);
+    }
+    TOF_MUTEX_UNLOCK();
+}
+
+void D6T44_reset(void)
+{
+    updateScreen(0.0);
+    gpio_set_level(LED_BLUE, 1);
+
+    gpio_set_level(LED_GREEN, 0);
+    gpio_set_level(LED_RED, 0);
+}
+
+void D6T44_app_run(void)
+{
+    run_flag = 1;
     xTaskCreate(d6t_app_task, "d6t-task", 2048, NULL, 5, NULL);
 }
 
-int D6T44l_init(void)
+void D6T44_app_stop(void)
 {
+    run_flag = 0;
+    updateScreen(0.0);
+}
+
+int D6T44l_init(d6t44l_app_cb app_cb)
+{
+    int i;
+    tof_mutex = xSemaphoreCreateMutex();
     int err = scan_device();
 
-    if (err != 1) {
+    gpio_set_direction(LED_BLUE, GPIO_MODE_OUTPUT);
+    gpio_set_direction(LED_RED, GPIO_MODE_OUTPUT);
+    gpio_set_direction(LED_GREEN, GPIO_MODE_OUTPUT);
+
+    gpio_set_direction(BUZZER_IO, GPIO_MODE_OUTPUT);
+    gpio_set_level(BUZZER_IO, 0);
+
+    if (err != 1)
+    {
         ESP_LOGE(__FUNCTION__, "Device Not found");
-        return -1;
+        return err;
     }
 
-    app_run();
+    user_callback = app_cb;
+
+    for (i = 0; i < 16; i++)
+    {
+        data_calib_3[i] = (data_3[i] - data_1[i]) * ((double)Txh - (double)Txl_1) / (data_2[i] - data_1[i]) + (double)Txl_1;
+    }
+
+    D6T44_reset();
+
     return err;
 }
