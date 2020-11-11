@@ -8,7 +8,6 @@
 
 #define TAG "vl53l3cx-app"
 
-
 VL53LX_Dev_t dev;
 VL53LX_DEV Dev = &dev;
 
@@ -21,7 +20,7 @@ static void vl53l3cx_app_task(void *arg)
     VL53LX_MultiRangingData_t MultiRangingData;
     VL53LX_MultiRangingData_t *pMultiRangingData = &MultiRangingData;
     uint8_t NewDataReady = 0;
-    int no_of_object_found = 0, j;
+    int no_of_object_found = 0;
 
     VL53LX_Error status = VL53LX_ERROR_NONE;
 
@@ -35,40 +34,30 @@ static void vl53l3cx_app_task(void *arg)
             no_of_object_found = pMultiRangingData->NumberOfObjectsFound;
             if (no_of_object_found > 0)
             {
-#if 0
-                printf("Count=%5d, ", pMultiRangingData->StreamCount);
-                printf("#Objs=%1d ", no_of_object_found);
-#endif
-                for (j = 0; j < no_of_object_found; j++)
+                if (pMultiRangingData->RangeData[0].RangeStatus == VL53LX_RANGESTATUS_RANGE_VALID)
                 {
-                    // if (j != 0)
-                    //     printf("\n");
-
-                    if (pMultiRangingData->RangeData[j].RangeStatus == VL53LX_RANGESTATUS_RANGE_VALID)
+                    if (pMultiRangingData->RangeData[0].RangeMilliMeter < DISTANCE_THRESHOLD && isInside == 0)
                     {
-                        if (pMultiRangingData->RangeData[j].RangeMilliMeter < DISTANCE_THRESHOLD && isInside == 0)
-                        {
-                            isInside = 1;
-                            // printf("D=%5dmm \n", pMultiRangingData->RangeData[j].RangeMilliMeter);
-                            vl53l3cx_event_t event = {0};
-                            event.id = TOF_EVT_THRESHOLD_INSIDE;
-                            user_callbacks(&event);
-                        }
-                        else if (pMultiRangingData->RangeData[j].RangeMilliMeter >= DISTANCE_THRESHOLD && isInside == 1)
-                        {
-                            isInside = 0;
-                            vl53l3cx_event_t event = {0};
-                            event.id = TOF_EVT_THRESHOLD_OUTSIDE;
-                            user_callbacks(&event);
-                        }
-#if 0
-                        printf("status=%d, D=%5dmm, Signal=%2.2f Mcps, Ambient=%2.2f Mcps \n",
-                               pMultiRangingData->RangeData[j].RangeStatus,
-                               pMultiRangingData->RangeData[j].RangeMilliMeter,
-                               pMultiRangingData->RangeData[j].SignalRateRtnMegaCps / 65536.0,
-                               pMultiRangingData->RangeData[j].AmbientRateRtnMegaCps / 65536.0);
-#endif
+                        isInside = 1;
+                        // printf("D=%5dmm \n", pMultiRangingData->RangeData[0].RangeMilliMeter);
+                        vl53l3cx_event_t event = {0};
+                        event.id = TOF_EVT_THRESHOLD_INSIDE;
+                        user_callbacks(&event);
                     }
+                    else if (pMultiRangingData->RangeData[0].RangeMilliMeter >= DISTANCE_THRESHOLD && isInside == 1)
+                    {
+                        isInside = 0;
+                        vl53l3cx_event_t event = {0};
+                        event.id = TOF_EVT_THRESHOLD_OUTSIDE;
+                        user_callbacks(&event);
+                    }
+#ifdef DEBUG
+                    printf("status=%d, D=%5dmm, Signal=%2.2f Mcps, Ambient=%2.2f Mcps \n",
+                           pMultiRangingData->RangeData[0].RangeStatus,
+                           pMultiRangingData->RangeData[0].RangeMilliMeter,
+                           pMultiRangingData->RangeData[0].SignalRateRtnMegaCps / 65536.0,
+                           pMultiRangingData->RangeData[0].AmbientRateRtnMegaCps / 65536.0);
+#endif
                 }
             }
             else

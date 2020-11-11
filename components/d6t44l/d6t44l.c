@@ -47,6 +47,7 @@ uint8_t rbuf[N_READ];
 double pix_data[N_PIXEL];
 
 static uint8_t run_flag = 0;
+static uint8_t start_sampling = 0;
 // static double current_temp = 0.0;
 static SemaphoreHandle_t tof_mutex;
 static d6t44l_app_cb user_callback = NULL;
@@ -57,7 +58,7 @@ static void updateScreen(double temp)
 {
     char str[10];
 
-    sprintf(str, "%04.1f C", temp);
+    sprintf(str, "%04.1fC", temp);
     ssd1306_fill(Black);
     ssd1306_set_cursor(15, 38);
 
@@ -179,7 +180,7 @@ static void d6t_app_task(void)
                     itemp = (float)conv8us_s16_le(rbuf, j);
 #ifdef DEBUG
                     printf("%4.1f", itemp / 10.0);
-                    if((i % N_ROW) == N_ROW - 1) 
+                    if ((i % N_ROW) == N_ROW - 1)
                         printf("\n");
                     else
                         printf(", ");
@@ -197,16 +198,22 @@ static void d6t_app_task(void)
                     }
                 }
 
-                temp[count] = hTemp;
-                count += 1;
+                if (start_sampling == 1)
+                {
+                    // printf("temp[%d] = %4.1f\n", count, hTemp);
+                    temp[count] = hTemp;
+                    count += 1;
+                }
             }
-        }        
+        }
 
         if (count == SAMPLING)
         {
             d6t44l_event_t event = {0};
             event.id = TEMP_EVT_DATA_READY;
             user_callback(&event);
+            start_sampling = 0;
+            count = 0;
         }
     }
     vTaskDelete(NULL);
@@ -220,12 +227,14 @@ void D6T44_update_temp(void)
     int i;
     double htemp = 0.0;
     for (i = 0; i < SAMPLING; i++)
-    {
+    {        
         if (temp[i] > htemp)
         {
             htemp = temp[i];
         }
     }
+    // printf("\n");
+    htemp+= 2.0;
 
     updateScreen(htemp);
 
@@ -266,10 +275,16 @@ void D6T44_reset(void)
 
     gpio_set_level(LED_GREEN, 0);
     gpio_set_level(LED_RED, 0);
+    memset(temp, 0, sizeof(temp));
+}
+
+void D6T44L_start_sampling(void) {
+    start_sampling = 1;
 }
 
 void D6T44_app_run(void)
 {
+    ESP_LOGI(TAG, "D6T44L start");
     run_flag = 1;
     xTaskCreate(d6t_app_task, "d6t-task", 2048, NULL, 5, NULL);
 }
@@ -295,13 +310,13 @@ int D6T44l_init(d6t44l_app_cb app_cb)
 
     if (err != 1)
     {
-        ESP_LOGE(__FUNCTION__, "Device Not found");
+        ESP_LOGE(__FUNCTION__, "Device Not found.");
         return err;
     }
 
     user_callback = app_cb;
 
-    for (i = 0; i < 16; i++)
+    for (i = 0; i < N_PIXEL; i++)
     {
         data_calib_3[i] = (data_3[i] - data_1[i]) * ((double)Txh - (double)Txl_1) / (data_2[i] - data_1[i]) + (double)Txl_1;
     }

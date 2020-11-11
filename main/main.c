@@ -42,15 +42,17 @@ static void display_time()
     time(&now);
     localtime_r(&now, &timeinfo);
 
-    char strftime_buf[64];
+    char strftime_buf[64];   
 
-    strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
+    // strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
+    sprintf(strftime_buf, "%0d:%0d", timeinfo.tm_hour, timeinfo.tm_min);
     ESP_LOGI(TAG, "Current Time: %s", strftime_buf);
 }
 
 void time_sync_notification_cb(struct timeval *tv)
 {
     ESP_LOGI(TAG, "Notification of a time synchronizaion event");
+    display_time();
 }
 
 static void d6t44lc_event_handler(d6t44l_event_t *evt)
@@ -58,8 +60,7 @@ static void d6t44lc_event_handler(d6t44l_event_t *evt)
     int i;
     switch (evt->id)
     {
-    case TEMP_EVT_DATA_READY:
-        D6T44_app_stop();
+    case TEMP_EVT_DATA_READY:        
         D6T44_update_temp();
         break;
 
@@ -76,11 +77,11 @@ static void vl53l3cx_event_handler(vl53l3cx_event_t *evt)
 {
     switch (evt->id)
     {
-    case TOF_EVT_THRESHOLD_INSIDE:
-        D6T44_app_run();
+    case TOF_EVT_THRESHOLD_INSIDE:        
+        D6T44L_start_sampling();
         break;
 
-    case TOF_EVT_THRESHOLD_OUTSIDE:        
+    case TOF_EVT_THRESHOLD_OUTSIDE:         
         D6T44_reset();
         break;
 
@@ -126,6 +127,8 @@ static void cloud_cb(cloud_event_t *evt)
     {
     case CLOUD_EVT_CONNECT:
         ESP_LOGI(TAG, "CLOUD_EVT_CONNECT");
+        // Init Bluetooth
+        
         break;
 
     case CLOUD_EVT_DISCONNECT:
@@ -183,8 +186,6 @@ static void smart_wifi_cb(smart_wifi_event_t *evt)
                 ESP_LOGI(TAG, "Waiting for system time to be set... (%d/%d)", retry, retry_count);
                 vTaskDelay(1000 / portTICK_PERIOD_MS);
             }
-
-            display_time();
         }
         break;
 
@@ -275,10 +276,11 @@ void app_main()
 
     ssd1306_init();
 
-    // ssd1306_fill(Black);
-    // ssd1306_draw_rectangle(1, 1, SSD1306_WIDTH - 1, SSD1306_HEIGHT - 1, White);
 
-    D6T44l_init(d6t44lc_event_handler);
+
+    if(D6T44l_init(d6t44lc_event_handler) == 1) {
+        D6T44_app_run();
+    }
 
     if (init_vl53l3cx(vl53l3cx_event_handler) == VL53LX_ERROR_NONE)
     {

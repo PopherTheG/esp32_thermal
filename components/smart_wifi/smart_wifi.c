@@ -15,6 +15,10 @@
 
 #define TAG "wifi-app"
 
+#define NVS_PARTITION_NAMESPACE "storage"
+#define NVS_KEY_SSID            "ssid"
+#define NVS_KEY_PASSWORD        "password"
+
 static EventGroupHandle_t s_wifi_event_group;
 static smart_wifi_app_cb app_layer_cb;
 
@@ -30,13 +34,13 @@ static void save_config_to_nvs(wifi_config_t *config)
     esp_err_t err;
     nvs_handle_t handle;
 
-    err = nvs_open("storage", NVS_READWRITE, &handle);
+    err = nvs_open(NVS_PARTITION_NAMESPACE, NVS_READWRITE, &handle);
     ESP_ERROR_CHECK_WITHOUT_ABORT(err);
 
-    err = nvs_set_str(handle, "ssid", (char *)config->sta.ssid);
+    err = nvs_set_str(handle, NVS_KEY_SSID, (char *)config->sta.ssid);
     ESP_ERROR_CHECK_WITHOUT_ABORT(err);
 
-    err = nvs_set_str(handle, "password", (char *)config->sta.password);
+    err = nvs_set_str(handle, NVS_KEY_PASSWORD, (char *)config->sta.password);
     ESP_ERROR_CHECK_WITHOUT_ABORT(err);
 
     nvs_close(handle);
@@ -48,14 +52,14 @@ static esp_err_t load_config_from_nvs(wifi_config_t *config)
     nvs_handle_t handle;
 
     size_t len = 32;
-    err = nvs_open("storage", NVS_READWRITE, &handle);
+    err = nvs_open(NVS_PARTITION_NAMESPACE, NVS_READWRITE, &handle);
     ESP_ERROR_CHECK_WITHOUT_ABORT(err);
 
-    err = nvs_get_str(handle, "ssid", (char *)config->sta.ssid, &len);
+    err = nvs_get_str(handle, NVS_KEY_SSID, (char *)config->sta.ssid, &len);
     ESP_ERROR_CHECK_WITHOUT_ABORT(err);
 
     size_t pLen = 32;
-    err = nvs_get_str(handle, "password", (char *)config->sta.password, &pLen);
+    err = nvs_get_str(handle, NVS_KEY_PASSWORD, (char *)config->sta.password, &pLen);
     ESP_ERROR_CHECK_WITHOUT_ABORT(err);
 
     nvs_close(handle);
@@ -118,8 +122,8 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
 
         memcpy(ssid, evt->ssid, sizeof(evt->ssid));
         memcpy(password, evt->password, sizeof(evt->password));
-        ESP_LOGI(TAG, "SSID:%s", ssid);
-        ESP_LOGI(TAG, "PASSWORD:%s", password);
+        // ESP_LOGI(TAG, "SSID:%s", ssid);
+        // ESP_LOGI(TAG, "PASSWORD:%s", password);
 
         save_config_to_nvs(&wifi_config);
 
