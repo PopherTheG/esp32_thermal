@@ -73,7 +73,6 @@ static void thermal_app_task(void* pData) {
     vTaskDelete(NULL);
 }
 
-
 int init_thermal(ir_app_cb event_handler) {
 
     esp_err_t esp_err = ESP_FAIL;

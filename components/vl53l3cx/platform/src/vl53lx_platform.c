@@ -166,8 +166,6 @@ VL53LX_Error VL53LX_ReadMulti(
 	return status;
 }
 
-
-
 VL53LX_Error VL53LX_WrWord(
 	VL53LX_Dev_t *pdev,
 	uint16_t index,

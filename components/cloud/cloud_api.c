@@ -123,7 +123,9 @@ cloud_ret_t cloud_api_set_mqtt_id(const char *id)
     sprintf(mqtt_rc_topic_rx, CLOUD_CFG_MQTT_BASE_TOPIC_RC_RX, id);
     sprintf(mqtt_rc_topic_tx, CLOUD_CFG_MQTT_BASE_TOPIC_RC_TX, id);
 
-    sprintf(mqtt_main_topic, "dev/ir/%s", id);
+    // sprintf(mqtt_main_topic, "xeleqt/v1/%s", id);
+    strcpy(mqtt_main_topic, "xeleqt/v1/user");
+    
     return CLOUD_RET_OK;
 }
 
