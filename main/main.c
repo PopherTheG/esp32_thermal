@@ -21,17 +21,30 @@
 
 #include "smart_wifi.h"
 #include "ssd1306.h"
-#include "vl53l3cx.h"
+
 #include "d6t44l.h"
 #include "cloud_api.h"
 #include "bluetooth_api.h"
 #include "ble_telemetry.h"
 
+#define VL53L1
+
+#ifdef VL53L1
+#include "vl53l1.h"
+#else
+#include "vl53l3cx.h"
+#endif
+
 #define TAG "main-app"
 #define I2C_MASTER_PORT 0
+#define ONLINE
 
-#define PORT    1883
-#define HOST    "52.221.96.155"
+#define PORT 2883
+#ifdef ONLINE
+#define HOST "52.221.96.155"
+#else
+#define HOST "192.168.10.3"
+#endif
 
 static uint8_t sent = 0;
 
@@ -71,8 +84,6 @@ static const uint16_t crc_table[256] = {0x0000, 0x1021, 0x2042, 0x3063, 0x4084,
                                         0x0cc1, 0xef1f, 0xff3e, 0xcf5d, 0xdf7c, 0xaf9b, 0xbfba, 0x8fd9, 0x9ff8,
                                         0x6e17, 0x7e36, 0x4e55, 0x5e74, 0x2e93, 0x3eb2, 0x0ed1, 0x1ef0};
 
-
-
 static uint16_t _CRC16(const uint8_t *data, size_t length, uint16_t seed, uint16_t final)
 {
     size_t count;
@@ -106,7 +117,8 @@ void time_sync_notification_cb(struct timeval *tv)
     display_time();
 }
 
-static void convert_to_hex_str(char* str, uint8_t* val, size_t len) {
+static void convert_to_hex_str(char *str, uint8_t *val, size_t len)
+{
     sprintf(str, "%02x%02x%02x%02x%02x%02x", val[0], val[1], val[2], val[3], val[4], val[5]);
 }
 
@@ -120,7 +132,7 @@ static void gatts_event_handler(bt_gatt_event_t *event)
         if (event->client.event.eddystone.type == BT_EDDYSTONE_TYPE_UID)
         {
             if (event->client.rssi > -65 && sent == 0)
-            {                
+            {
                 convert_to_hex_str(instanceID, event->client.event.eddystone.frame.uid.instance, BT_EDDYSTONE_INSTANCE_LEN);
                 ESP_LOGI(TAG, "==========================================Eddystone UID Start:=====================================================");
                 ESP_LOGI(TAG, "Eddystone Found");
@@ -143,8 +155,13 @@ static void gatts_event_handler(bt_gatt_event_t *event)
 
                 // buffer[0] = 1;
                 memcpy(&ble_telemetry->namespaceID, event->client.event.eddystone.frame.uid.namespace, 10);
-                memcpy(&ble_telemetry->instanceID, event->client.event.eddystone.frame.uid.instance, 6);                
-                cloud_api_send(&buffer, sizeof(ble_telemetry_t));
+                memcpy(&ble_telemetry->instanceID, event->client.event.eddystone.frame.uid.instance, 6);
+
+                uint16_t *crc = _CRC16(buffer, sizeof(ble_telemetry), 0xffff, 0x00);
+
+                memcpy(buffer + sizeof(ble_telemetry_t), &crc, 2);
+
+                cloud_api_send(&buffer, sizeof(ble_telemetry_t) + 2);
 
                 sent = 1;
             }
@@ -173,7 +190,7 @@ static void d6t44lc_event_handler(d6t44l_event_t *evt)
         break;
     }
 }
-
+#ifndef VL53L1
 static void vl53l3cx_event_handler(vl53l3cx_event_t *evt)
 {
     switch (evt->id)
@@ -191,6 +208,7 @@ static void vl53l3cx_event_handler(vl53l3cx_event_t *evt)
         break;
     }
 }
+#endif
 
 static void system_info_task(void *pdata)
 {
@@ -241,6 +259,11 @@ static void cloud_cb(cloud_event_t *evt)
 
     case CLOUD_EVT_DATA_MQTT:
         ESP_LOGI(TAG, "CLOUD_EVT_DATA_MQTT");
+        sent = 0;
+
+        ESP_LOGI(TAG, "MQTT Data received");
+        ESP_LOGI(TAG, "Topic=%.*s", evt->evt.data.mqtt.topic_len, evt->evt.data.mqtt.topic);
+        ESP_LOGI(TAG, "Data=%.*s", evt->evt.data.mqtt.len, evt->evt.data.mqtt.data);
         break;
 
     default:
@@ -252,9 +275,8 @@ static void cloud_cb(cloud_event_t *evt)
 static void connect_to_cloud(void)
 {
     cloud_api_init(cloud_cb, CLOUD_TYPE_MQTT);
-
     cloud_api_set_mqtt_id(serial);
-
+    
     cloud_ret_t cloud_ret = cloud_api_connect_host(HOST, PORT);
 
     if (cloud_ret == CLOUD_RET_OK)
@@ -363,7 +385,7 @@ void app_main()
 
     system_init();
     i2c_scan();
-    
+
     esp_efuse_mac_get_default(chipId);
     sprintf(serial, "%d%d%d%d%d%d", chipId[0], chipId[1], chipId[2], chipId[3], chipId[4], chipId[5]);
 
@@ -372,13 +394,14 @@ void app_main()
     ESP_LOGI(TAG, "Long serial: %lld", strtoll(serial, NULL, 0));
 
     initialise_wifi(smart_wifi_cb);
-
+    
+#if 0
     char bluetooth_name[23] = {0};
     sprintf(bluetooth_name, "Xeleqt_%.*s", 6, serial);
     printf("%s", bluetooth_name);
     bluetooth_register_gatt_handler(gatts_event_handler);
     bluetooth_init(bluetooth_name);
-
+#endif
     xTaskCreate(system_info_task, "sys-info", 2048, NULL, 1, NULL);
 
     ssd1306_init();
@@ -387,9 +410,14 @@ void app_main()
     {
         D6T44_app_run();
     }
-
+#ifdef VL53L1
+    if ( vl53l1_init() ) {
+        vl53l1_start_app();
+    }
+#else
     if (init_vl53l3cx(vl53l3cx_event_handler) == VL53LX_ERROR_NONE)
     {
         vl53l3cx_start_app();
     }
+#endif
 }

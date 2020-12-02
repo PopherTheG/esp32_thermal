@@ -85,7 +85,7 @@ VL53LX_Error VL53LX_WrByte(
 	uint8_t buffer[3];
 	buffer[0] = index >> 8;
 	buffer[1] = index & 0xff;
-	buffer[3] = (uint8_t)(VL53LX_p_003);
+	buffer[2] = (uint8_t)(VL53LX_p_003);
 
 	esp_err_t err;
 	i2c_cmd_handle_t cmd = i2c_cmd_link_create();
