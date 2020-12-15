@@ -4,11 +4,9 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-
 #include "vl53lx_error_codes.h"
 
 #define DISTANCE_THRESHOLD  500
-
 
 typedef enum {
     TOF_EVT_THRESHOLD_INSIDE,

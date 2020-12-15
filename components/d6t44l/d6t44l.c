@@ -219,94 +219,79 @@ static void d6t_app_task(void)
     vTaskDelete(NULL);
 }
 
-void D6T44_update_temp(void)
+void D6T44L_update_temp(void)
 {
     TOF_MUTEX_LOCK();
-    gpio_set_level(LED_BLUE, 0);
+    // gpio_set_level(LED_BLUE, 0);
 
     int i;
     double htemp = 0.0;
     for (i = 0; i < SAMPLING; i++)
-    {        
+    {
         if (temp[i] > htemp)
         {
             htemp = temp[i];
         }
     }
     // printf("\n");
-    htemp+= 2.0;
+    htemp += 2.0;
 
     updateScreen(htemp);
 
     if (htemp >= TEMPERATURE_THRESHOLD)
     {
-        gpio_set_level(LED_RED, 1);
-
-        gpio_set_level(BUZZER_IO, 1);
-        vTaskDelay(250 / portTICK_RATE_MS);
-        gpio_set_level(BUZZER_IO, 0);
-        vTaskDelay(250 / portTICK_RATE_MS);
-        gpio_set_level(BUZZER_IO, 1);
-        vTaskDelay(250 / portTICK_RATE_MS);
-        gpio_set_level(BUZZER_IO, 0);
-        vTaskDelay(250 / portTICK_RATE_MS);
-        gpio_set_level(BUZZER_IO, 1);
-        vTaskDelay(250 / portTICK_RATE_MS);
-        gpio_set_level(BUZZER_IO, 0);
-        vTaskDelay(250 / portTICK_RATE_MS);
-        gpio_set_level(BUZZER_IO, 1);
-        vTaskDelay(250 / portTICK_RATE_MS);
-        gpio_set_level(BUZZER_IO, 0);
+        // EVT_TEMP_FAIL
+        d6t44l_event_t event = {0};
+        event.id = TEMP_EVT_TEMP_FAIL;
+        user_callback(&event);
+        
     }
     else
     {
-        gpio_set_level(LED_GREEN, 1);
-        gpio_set_level(BUZZER_IO, 1);
-        vTaskDelay(250 / portTICK_RATE_MS);
-        gpio_set_level(BUZZER_IO, 0);
+        //EVT_TEMP_PASS
+        d6t44l_event_t event = {0};
+        event.id = TEMP_EVT_TEMP_PASS;
+        user_callback(&event);
+        
     }
     TOF_MUTEX_UNLOCK();
 }
 
-void D6T44_reset(void)
+void D6T44L_reset(void)
 {
     updateScreen(0.0);
-    gpio_set_level(LED_BLUE, 1);
 
-    gpio_set_level(LED_GREEN, 0);
-    gpio_set_level(LED_RED, 0);
     memset(temp, 0, sizeof(temp));
+
+    d6t44l_event_t event = {0};
+    event.id = TEMP_EVT_RESET;
+
+    user_callback(&event);
 }
 
-void D6T44L_start_sampling(void) {
+void D6T44L_start_sampling(void)
+{
     start_sampling = 1;
 }
 
-void D6T44_app_run(void)
+void D6T44L_app_run(void)
 {
     ESP_LOGI(TAG, "D6T44L start");
     run_flag = 1;
     xTaskCreate(d6t_app_task, "d6t-task", 2048, NULL, 5, NULL);
 }
 
-void D6T44_app_stop(void)
+void D6T44L_app_stop(void)
 {
     run_flag = 0;
     updateScreen(0.0);
 }
 
-int D6T44l_init(d6t44l_app_cb app_cb)
+int D6T44L_init(d6t44l_app_cb app_cb)
 {
     int i;
     tof_mutex = xSemaphoreCreateMutex();
     int err = scan_device();
-
-    gpio_set_direction(LED_BLUE, GPIO_MODE_OUTPUT);
-    gpio_set_direction(LED_RED, GPIO_MODE_OUTPUT);
-    gpio_set_direction(LED_GREEN, GPIO_MODE_OUTPUT);
-
-    gpio_set_direction(BUZZER_IO, GPIO_MODE_OUTPUT);
-    gpio_set_level(BUZZER_IO, 0);
 
     if (err != 1)
     {
@@ -321,7 +306,7 @@ int D6T44l_init(d6t44l_app_cb app_cb)
         data_calib_3[i] = (data_3[i] - data_1[i]) * ((double)Txh - (double)Txl_1) / (data_2[i] - data_1[i]) + (double)Txl_1;
     }
 
-    D6T44_reset();
+    D6T44L_reset();
 
     return err;
 }

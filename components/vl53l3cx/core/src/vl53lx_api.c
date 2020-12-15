@@ -59,11 +59,7 @@
 
 
 ********************************************************************************
-
 */
-
-
-
 
 #include "vl53lx_api.h"
 #include "vl53lx_register_settings.h"
@@ -75,7 +71,6 @@
 #include "vl53lx_api_debug.h"
 #include "vl53lx_api_core.h"
 #include "vl53lx_nvm.h"
-
 
 #define ZONE_CHECK 5
 
@@ -102,18 +97,12 @@
 
 #define DMAX_REFLECTANCE_IDX 2
 
-
-
 #define LOWPOWER_AUTO_VHV_LOOP_DURATION_US 245
 #define LOWPOWER_AUTO_OVERHEAD_BEFORE_A_RANGING 1448
 #define LOWPOWER_AUTO_OVERHEAD_BETWEEN_A_B_RANGING 2100
 
 #define FDA_MAX_TIMING_BUDGET_US 550000
 #define L4_FDA_MAX_TIMING_BUDGET_US 200000
-
-
-
-
 
 
 static int32_t BDTable[VL53LX_TUNING_MAX_TUNABLE_KEY] = {
@@ -221,8 +210,6 @@ VL53LX_Error VL53LX_GetUID(VL53LX_DEV Dev, uint64_t *pUid)
 	LOG_FUNCTION_END(Status);
 	return Status;
 }
-
-
 
 VL53LX_Error VL53LX_SetDeviceAddress(VL53LX_DEV Dev, uint8_t DeviceAddress)
 {

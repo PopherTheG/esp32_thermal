@@ -17,14 +17,14 @@
 
 #define TEMPERATURE_THRESHOLD   37.4
 
-#define LED_BLUE        16
-#define LED_GREEN       33
-#define LED_RED         25
-#define BUZZER_IO       17
+
 
 typedef enum {
     TEMP_EVT_DATA_READY,
     TEMP_EVT_ERROR,
+    TEMP_EVT_RESET,
+    TEMP_EVT_TEMP_FAIL,
+    TEMP_EVT_TEMP_PASS,
 } d6t44l_event_id_t;
 
 typedef struct d6t44l_event {
@@ -35,14 +35,14 @@ typedef void (*d6t44l_app_cb)(d6t44l_event_t *evt);
 
 void D6T44L_start_sampling(void);
 
-int D6T44l_init(d6t44l_app_cb app_cb);
+int D6T44L_init(d6t44l_app_cb app_cb);
 
-void D6T44_app_run(void);
+void D6T44L_app_run(void);
 
-void D6T44_app_stop(void);
+void D6T44L_app_stop(void);
 
-void D6T44_update_temp(void);
+void D6T44L_update_temp(void);
 
-void D6T44_reset(void);
+void D6T44L_reset(void);
 
 #endif /* COMPONENTS_D6T44L_D6T44L */

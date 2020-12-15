@@ -3,6 +3,7 @@
 #include <sys/time.h>
 #include <stdlib.h>
 #include <string.h>
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/timers.h"
@@ -25,7 +26,8 @@
 #include "d6t44l.h"
 #include "cloud_api.h"
 #include "bluetooth_api.h"
-#include "ble_telemetry.h"
+#include "telemetry_protocol.h"
+#include "scanner_app.h"
 
 #define VL53L1
 
@@ -46,7 +48,22 @@
 #define HOST "192.168.10.3"
 #endif
 
+#define LED_BLUE 18
+#define LED_GREEN 33
+#define LED_RED 25
+#define BUZZER_IO 19
+
+typedef enum
+{
+    STATUS_READY,
+    STATUS_ERROR,
+    STATUS_AUTH_SUCCESS,
+    STATUS_AUTH_FAIL,
+} state_t;
+
 static uint8_t sent = 0;
+
+static state_t state = STATUS_ERROR;
 
 static uint8_t uuid[16];
 static uint8_t obtain_time = 1;
@@ -143,13 +160,14 @@ static void gatts_event_handler(bt_gatt_event_t *event)
                 esp_log_buffer_hex(TAG, event->client.event.eddystone.frame.uid.namespace, BT_EDDYSTONE_NAMESPACE_LEN);
                 ESP_LOGI(TAG, "Instance ID:");
                 ESP_LOGI(TAG, "%s", instanceID);
-                ESP_LOGI(TAG, "==========================================Eddystone UID End:=====================================================");
+                ESP_LOGI(TAG, "==========================================Eddystone UID End:=======================================================");
 
                 uint8_t buffer[32] = {0};
 
-                ble_telemetry_t *ble_telemetry = (ble_telemetry_t *)buffer;
+                telemetry_t *ble_telemetry = (telemetry_t *)buffer;
 
-                ble_telemetry->type = 1;
+                ble_telemetry->type = TELEMETRY_TYPE_AUTH;
+                ble_telemetry->device_type = TELEMETRY_DEVICE_BLE;
                 ble_telemetry->reqNo = reqNo;
                 ble_telemetry->serial = strtoull(serial, NULL, 0);
 
@@ -158,10 +176,8 @@ static void gatts_event_handler(bt_gatt_event_t *event)
                 memcpy(&ble_telemetry->instanceID, event->client.event.eddystone.frame.uid.instance, 6);
 
                 uint16_t *crc = _CRC16(buffer, sizeof(ble_telemetry), 0xffff, 0x00);
-
-                memcpy(buffer + sizeof(ble_telemetry_t), &crc, 2);
-
-                cloud_api_send(&buffer, sizeof(ble_telemetry_t) + 2);
+                memcpy(buffer + sizeof(telemetry_t), &crc, 2);
+                cloud_api_send(&buffer, sizeof(telemetry_t) + 2);
 
                 sent = 1;
             }
@@ -173,23 +189,91 @@ static void gatts_event_handler(bt_gatt_event_t *event)
     }
 }
 
+static void scanner_event_handler(scanner_event_t *evt) {
+    switch (evt->id)
+    {
+    case SCANNER_EVT_UUID_VALID:  // process authentication.    
+
+        break;
+
+    case SCANNER_EVT_UUID_INVALID: // play error blink red twice
+        
+        break;
+    
+    default:
+        break;
+    }
+}
+
 static void d6t44lc_event_handler(d6t44l_event_t *evt)
 {
     int i;
     switch (evt->id)
     {
     case TEMP_EVT_DATA_READY:
-        D6T44_update_temp();
+        gpio_set_level(LED_BLUE, 0);
+        D6T44L_update_temp();
         break;
 
     case TEMP_EVT_ERROR:
 
         break;
 
+    case TEMP_EVT_TEMP_PASS:
+        gpio_set_level(LED_GREEN, 1);
+        gpio_set_level(BUZZER_IO, 1);
+        vTaskDelay(250 / portTICK_RATE_MS);
+        gpio_set_level(BUZZER_IO, 0);
+        break;
+    case TEMP_EVT_RESET:
+        // gpio_set_level(LED_BLUE, 1);
+        gpio_set_level(LED_GREEN, 0);
+        gpio_set_level(LED_RED, 0);
+        state = STATUS_READY;
+        break;
+
+    case TEMP_EVT_TEMP_FAIL:
+        gpio_set_level(LED_RED, 1);
+        gpio_set_level(BUZZER_IO, 1);
+        vTaskDelay(250 / portTICK_RATE_MS);
+        gpio_set_level(BUZZER_IO, 0);
+        vTaskDelay(250 / portTICK_RATE_MS);
+        gpio_set_level(BUZZER_IO, 1);
+        vTaskDelay(250 / portTICK_RATE_MS);
+        gpio_set_level(BUZZER_IO, 0);
+        vTaskDelay(250 / portTICK_RATE_MS);
+        gpio_set_level(BUZZER_IO, 1);
+        vTaskDelay(250 / portTICK_RATE_MS);
+        gpio_set_level(BUZZER_IO, 0);
+        vTaskDelay(250 / portTICK_RATE_MS);
+        gpio_set_level(BUZZER_IO, 1);
+        vTaskDelay(250 / portTICK_RATE_MS);
+        gpio_set_level(BUZZER_IO, 0);
+        break;
+
     default:
         break;
     }
 }
+
+static void vl53l1_event_handler(vl53l1_event_t *evt)
+{
+    switch (evt->id)
+    {
+    case EVT_THRESHOLD_INSIDE:
+        D6T44L_start_sampling();
+        break;
+
+    case EVT_THRESHOLD_OUTSIDE:
+        D6T44L_reset();
+        break;
+
+    default:
+
+        break;
+    }
+}
+
 #ifndef VL53L1
 static void vl53l3cx_event_handler(vl53l3cx_event_t *evt)
 {
@@ -200,7 +284,7 @@ static void vl53l3cx_event_handler(vl53l3cx_event_t *evt)
         break;
 
     case TOF_EVT_THRESHOLD_OUTSIDE:
-        D6T44_reset();
+        D6T44L_reset();
         break;
 
     default:
@@ -276,7 +360,7 @@ static void connect_to_cloud(void)
 {
     cloud_api_init(cloud_cb, CLOUD_TYPE_MQTT);
     cloud_api_set_mqtt_id(serial);
-    
+
     cloud_ret_t cloud_ret = cloud_api_connect_host(HOST, PORT);
 
     if (cloud_ret == CLOUD_RET_OK)
@@ -350,6 +434,20 @@ static void i2c_scan(void)
     ESP_LOGI(TAG, "Slave Count %d", slave_count);
 }
 
+static void blink_task(void *pvParam)
+{
+    int cnt = 0;
+    while (1)
+    {
+        if (state == STATUS_READY)
+        {
+            gpio_set_level(LED_BLUE, cnt % 2);
+            cnt++;
+        }
+        vTaskDelay(500 / portTICK_PERIOD_MS);
+    }
+}
+
 static void system_init(void)
 {
     ESP_LOGI(TAG, "System Init");
@@ -386,6 +484,13 @@ void app_main()
     system_init();
     i2c_scan();
 
+    gpio_set_direction(LED_BLUE, GPIO_MODE_OUTPUT);
+    gpio_set_direction(LED_RED, GPIO_MODE_OUTPUT);
+    gpio_set_direction(LED_GREEN, GPIO_MODE_OUTPUT);
+
+    gpio_set_direction(BUZZER_IO, GPIO_MODE_OUTPUT);
+    gpio_set_level(BUZZER_IO, 0);
+
     esp_efuse_mac_get_default(chipId);
     sprintf(serial, "%d%d%d%d%d%d", chipId[0], chipId[1], chipId[2], chipId[3], chipId[4], chipId[5]);
 
@@ -394,24 +499,33 @@ void app_main()
     ESP_LOGI(TAG, "Long serial: %lld", strtoll(serial, NULL, 0));
 
     initialise_wifi(smart_wifi_cb);
-    
+
 #if 0
     char bluetooth_name[23] = {0};
     sprintf(bluetooth_name, "Xeleqt_%.*s", 6, serial);
-    printf("%s", bluetooth_name);
+    // printf("%s", bluetooth_name);
     bluetooth_register_gatt_handler(gatts_event_handler);
     bluetooth_init(bluetooth_name);
 #endif
-    xTaskCreate(system_info_task, "sys-info", 2048, NULL, 1, NULL);
+
+    if (scanner_app_init(scanner_event_handler) == SCANNER_STATUS_OK)
+    {
+        scanner_app_start();
+    }
+    else
+    {
+        ESP_LOGE(TAG, "Unable to start scanner!");
+    }
 
     ssd1306_init();
 
-    if (D6T44l_init(d6t44lc_event_handler) == 1)
+    if (D6T44L_init(d6t44lc_event_handler) == 1)
     {
-        D6T44_app_run();
+        D6T44L_app_run();
     }
 #ifdef VL53L1
-    if ( vl53l1_init() ) {
+    if (vl53l1_init(vl53l1_event_handler) == ESP_OK)
+    {
         vl53l1_start_app();
     }
 #else
@@ -420,4 +534,7 @@ void app_main()
         vl53l3cx_start_app();
     }
 #endif
+
+    xTaskCreate(system_info_task, "sys-info", 2048, NULL, 1, NULL);
+    xTaskCreate(blink_task, "blink", 1024, NULL, 5, NULL);
 }

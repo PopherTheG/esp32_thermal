@@ -1,27 +1,21 @@
 #include "esp_log.h"
 #include "driver/i2c.h"
 #include "driver/gpio.h"
-#include <string.h>
-#include <stdlib.h>
-
 #include "VL53L1X_api.h"
 #include "VL53L1X_calibration.h"
+
 #include "vl53l1.h"
 
 #define TAG "vl53l1"
 
-#define NOBODY 0
-#define SOMEONE 1
-#define LEFT 0
-#define RIGHT 1
-
-#define DIST_THRESHOLD_MAX 500
-
 static uint8_t dev;
 static uint8_t run_flag = 0;
+static vl53l1_app_cb user_callbacks = NULL;
+
 static int center[2] = {167, 231}; /* these are the spad center of the 2 8*16 zones */
 static int Zone = 0;
 static int PplCounter = 0;
+static uint8_t isInside = 0;
 
 static int process_people_counting_data(int16_t distance, uint8_t zone)
 {
@@ -118,7 +112,6 @@ static void vl53l1x_app_task(void *arg)
 
     while (run_flag)
     {
-        ESP_LOGI(TAG, "");
         while (dataReady == 0)
         {
             status = VL53L1X_CheckForDataReady(dev, &dataReady);
@@ -134,9 +127,8 @@ static void vl53l1x_app_task(void *arg)
             ESP_LOGE(TAG, "Error in operating the device.");
         }
 
-        // vTaskDelay(10 / portTICK_RATE_MS);
-
-        status = VL53L1X_SetROICenter(dev, center[Zone]);        
+#ifdef PEOPLE_COUNTING_MODE
+        status = VL53L1X_SetROICenter(dev, center[Zone]);
         if (status != 0)
         {
             ESP_LOGE(TAG, "Error in changing the center of the ROI.\n");
@@ -148,6 +140,24 @@ static void vl53l1x_app_task(void *arg)
         Zone = Zone % 2;
 
         ESP_LOGI(TAG, "Zone: %d, RangeStatus: %d, Distance: %d, Count: %d", Zone, RangeStatus, Distance, PplCounter);
+#else
+
+        // ESP_LOGI(TAG, "Distance: %d", Distance);
+        if (Distance <= DIST_THRESHOLD_MAX && isInside == 0 ) {
+            isInside = 1;
+            vl53l1_event_t event = {0};
+            event.id = EVT_THRESHOLD_INSIDE;
+            event.distance = Distance;
+            user_callbacks(&event);
+
+        } else if (Distance > DIST_THRESHOLD_MAX && isInside == 1) {
+            isInside = 0;
+            vl53l1_event_t event = {0};
+            event.id = EVT_THRESHOLD_OUTSIDE;
+            event.distance = Distance;
+            user_callbacks(&event);
+        }
+#endif
 
         vTaskDelay(200 / portTICK_RATE_MS);
     }
@@ -166,12 +176,14 @@ void vl53l1_start_app(void)
     xTaskCreate(vl53l1x_app_task, "vl53l1-task", 2048, NULL, 5, NULL);
 }
 
-uint8_t vl53l1_init(void)
+uint8_t vl53l1_init(vl53l1_app_cb app_cb)
 {
     gpio_set_direction(GPIO_NUM_32, GPIO_MODE_OUTPUT);
     gpio_set_level(GPIO_NUM_32, 0);
 
-    dev = 0x52;
+    user_callbacks = app_cb;
+
+    dev = 0x29;
 
     gpio_set_level(GPIO_NUM_32, 1);
 
@@ -197,15 +209,15 @@ uint8_t vl53l1_init(void)
     ESP_LOGI(TAG, "Chip booted");
 
     status = VL53L1X_SensorInit(dev);
-    ESP_LOGE(TAG, "Sensor Init %d", status);
+    // ESP_LOGE(TAG, "Sensor Init %d", status);
     status += VL53L1X_SetDistanceMode(dev, 2);
-    ESP_LOGE(TAG, "Set Distance Mode %d", status);
+    // ESP_LOGE(TAG, "Set Distance Mode %d", status);
     status += VL53L1X_SetTimingBudgetInMs(dev, 20);
-    ESP_LOGE(TAG, "Set Timing Budget %d", status);
+    // ESP_LOGE(TAG, "Set Timing Budget %d", status);
     status = VL53L1X_SetInterMeasurementInMs(dev, 100);
-    ESP_LOGE(TAG, "Set Inter Measurement %d", status);
+    // ESP_LOGE(TAG, "Set Inter Measurement %d", status);
     status += VL53L1X_SetROI(dev, 8, 16);
-    ESP_LOGE(TAG, "Set ROI %d", status);
+    // ESP_LOGE(TAG, "Set ROI %d", status);
 
     if (status != ESP_OK)
     {
