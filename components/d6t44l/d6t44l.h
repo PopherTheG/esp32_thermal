@@ -17,8 +17,6 @@
 
 #define TEMPERATURE_THRESHOLD   37.4
 
-
-
 typedef enum {
     TEMP_EVT_DATA_READY,
     TEMP_EVT_ERROR,

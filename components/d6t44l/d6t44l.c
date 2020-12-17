@@ -243,8 +243,7 @@ void D6T44L_update_temp(void)
         // EVT_TEMP_FAIL
         d6t44l_event_t event = {0};
         event.id = TEMP_EVT_TEMP_FAIL;
-        user_callback(&event);
-        
+        user_callback(&event);        
     }
     else
     {

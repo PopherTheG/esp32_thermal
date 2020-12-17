@@ -17,9 +17,9 @@ scanner_status_t hw1258_init(void) {
     delay_ms(10);
     hw1258_get_expected_response();
     
-    scanner_uart_write_bytes(SCMMDT, strlen(SCMMDT));
-    delay_ms(10);
-    hw1258_get_expected_response();
+    // scanner_uart_write_bytes(SCMMDT, strlen(SCMMDT));
+    // delay_ms(10);
+    // hw1258_get_expected_response();
     
     scanner_uart_write_bytes(MDTMIT, strlen(MDTMIT));
     delay_ms(10);

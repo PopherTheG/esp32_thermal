@@ -15,18 +15,22 @@ enum {
 
 typedef struct {
     uint8_t type;
+    uint16_t version;
     uint8_t device_type;
     uint16_t reqNo;
     uint64_t serial;
+    float temperature;
     uint8_t namespaceID[10];
     uint8_t instanceID[6];
 } __attribute__((packed)) telemetry_t;
 
 typedef struct {
     uint8_t type;
+    uint16_t version;
     uint8_t device_type;
     uint16_t reqNo;
     uint64_t serial;
+    float temperature;
     char uuid[36];
 } __attribute__((packed)) telemetry_simple_t;
 
