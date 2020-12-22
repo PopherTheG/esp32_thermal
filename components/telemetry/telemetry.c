@@ -6,17 +6,26 @@
 #include "freertos/semphr.h"
 #include "esp_log.h"
 
+#include "d6t44l.h"
 #include "telemetry_protocol.h"
 #include "telemetry.h"
+#include "scanner_app.h"
+#include "cloud_api.h"
+
 
 #define TELEMETRY_QUEUE_LEN 10
 
 #define TAG             "telemetry"
 #define TELEMETRY_LOCK(_mutex)    xSemaphoreTake(_mutex, portMAX_DELAY)
 #define TELEMETRY_UNLOCK(_mutex)  xSemaphoreGive(_mutex)
+#define SCALE_10X(__float_num) (__float_num * 10)
 
+static uint16_t reqNo = 1;
 static SemaphoreHandle_t xTelemetryGuard;
 static QueueHandle_t xTelemetryQueue = NULL;
+static TaskHandle_t xTelemetryTask;
+static SemaphoreHandle_t xTelemetrySemph;
+
 static uint64_t telemetry_id;
 
 static const uint16_t crc_table[256] = {0x0000, 0x1021, 0x2042, 0x3063, 0x4084,
@@ -62,6 +71,47 @@ static uint16_t _CRC16(const uint8_t *data, size_t length, uint16_t seed, uint16
     return (uint16_t)(crc ^ final);
 }
 
+static void telemetry_task(void *pdata) {
+
+    static uint8_t telemetry_buffer[128];
+    telemetry_simple_t data;
+
+    while (1)
+    {
+        telemtery_msg_t msg;
+        xQueueReceive(xTelemetryQueue, &msg, portMAX_DELAY);
+
+        if(msg.id == TELEMETRY_TASK_STOP) {
+            break;
+        } else if(msg.id == TELEMETRY_TASK_LOG) {
+            telemetry_simple_t *tmp_telemetry = (telemetry_simple_t *)telemetry_buffer;
+            tmp_telemetry->type = TELEMETRY_TYPE_LOG;
+            tmp_telemetry->device_type = msg.data;
+            tmp_telemetry->reqNo = reqNo++;
+            tmp_telemetry->serial = telemetry_id;
+
+            double temp = 0.0;
+            D6T44l_get_data(&temp);            
+            
+            if(msg.data == 1) {
+                scanner_app_get_data(&tmp_telemetry->uuid);                
+            }
+            
+            tmp_telemetry->temperature = SCALE_10X(temp);
+
+            uint16_t *crc = (uint16_t *)&telemetry_buffer[sizeof(telemetry_simple_t)];
+            *crc = _CRC16(telemetry_buffer, sizeof(telemetry_simple_t), 0xffff, 0x00);
+
+
+            cloud_api_send(telemetry_buffer, sizeof(telemetry_simple_t) + 2);
+        }
+    }
+
+    xSemaphoreGive(xTelemetrySemph);
+    vTaskDelete(NULL);
+    
+}
+
 void telemetry_init(void) {
     xTelemetryGuard = xSemaphoreCreateMutex();
     configASSERT(xTelemetryGuard);
@@ -78,8 +128,35 @@ void telemetry_start(uint64_t* id) {
     configASSERT(id != NULL);
 
     telemetry_id = *id;
+    xTaskCreate(telemetry_task, "telemetry-task", 1024 * 3, NULL, 2, &xTelemetryTask);
 }
 
-void telemetry_stop(void) {
+void telemetry_stop(void) {    
 
+    xTelemetrySemph = xSemaphoreCreateBinary();    
+
+    const telemtery_msg_t stop_msg = {
+        .id = TELEMETRY_TASK_STOP
+    };
+
+    if(xQueueSendToBack(xTelemetryQueue, &stop_msg, pdMS_TO_TICKS(100) == pdPASS)) {
+        xSemaphoreTake(xTelemetrySemph, portMAX_DELAY);
+    } else {
+        ESP_LOGE(TAG, "Failed to send stop message.");
+    }
+
+    vSemaphoreDelete(xTelemetrySemph);
+    vQueueDelete(xTelemetryQueue);
+}
+
+telemetry_err_t telemetry_notify_log(uint8_t device_type) {
+    const telemtery_msg_t user_log = {
+        .id = TELEMETRY_TASK_LOG,
+        .data = device_type
+    };
+
+    if(xQueueSendToFront(xTelemetryQueue, &user_log, pdMS_TO_TICKS(10)) == pdPASS ) {
+        return TELEMETRY_OK;
+    }
+    return TELEMETRY_ERR;
 }

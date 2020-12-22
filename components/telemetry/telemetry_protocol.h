@@ -25,13 +25,12 @@ typedef struct {
 } __attribute__((packed)) telemetry_t;
 
 typedef struct {
-    uint8_t type;
-    uint16_t version;
+    uint8_t type;    
     uint8_t device_type;
     uint16_t reqNo;
     uint64_t serial;
-    float temperature;
-    char uuid[36];
+    uint16_t temperature;
+    char uuid[37];
 } __attribute__((packed)) telemetry_simple_t;
 
 #endif /* COMPONENTS_TELEMETRY_TELEMETRY_PROTOCOL */

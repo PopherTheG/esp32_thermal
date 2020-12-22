@@ -41,6 +41,8 @@ void D6T44L_app_stop(void);
 
 void D6T44L_update_temp(void);
 
+void D6T44l_get_data(double *temp);
+
 void D6T44L_reset(void);
 
 #endif /* COMPONENTS_D6T44L_D6T44L */

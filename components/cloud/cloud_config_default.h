@@ -1,6 +1,14 @@
 #ifndef COMPONENTS_CLOUD_CLOUD_CONFIG_DEFAULT
 #define COMPONENTS_CLOUD_CLOUD_CONFIG_DEFAULT
 
+#ifndef CLOUD_CFG_MQTT_HOST
+#define CLOUD_CFG_MQTT_HOST                     "52.221.96.155"
+#endif
+
+#ifndef CLOUD_CFG_MQTT_PORT
+#define CLOUD_CFG_MQTT_PORT                     2883
+#endif
+
 #ifndef CLOUD_CFG_MQTT_TOPIC_MAIN
 #define CLOUD_CFG_MQTT_TOPIC_MAIN               "xeleqt/v1"
 #endif

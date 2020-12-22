@@ -40,13 +40,13 @@
 
 #define TAG "main-app"
 #define I2C_MASTER_PORT 0
-#define ONLINE
+// #define ONLINE
 
-#define PORT 2883
+#define PORT 1883
 #ifdef ONLINE
 #define HOST "52.221.96.155"
 #else
-#define HOST "192.168.10.3"
+#define HOST "192.168.10.4"
 #endif
 
 #define LED_BLUE 18
@@ -54,8 +54,7 @@
 #define LED_RED 25
 #define BUZZER_IO 19
 
-typedef enum
-{
+typedef enum {
     STATE_READY,
     STATE_SCAN,
     STATE_ERROR,
@@ -72,7 +71,8 @@ static uint8_t uuid[16];
 static uint8_t obtain_time = 1;
 char serial[32] = {0};
 uint8_t chipId[6] = {0};
-static uint16_t reqNo = 1;
+
+static uint8_t device_type = 0;
 
 static void display_time()
 {
@@ -99,6 +99,12 @@ static void convert_to_hex_str(char *str, uint8_t *val, size_t len)
     sprintf(str, "%02x%02x%02x%02x%02x%02x", val[0], val[1], val[2], val[3], val[4], val[5]);
 }
 
+static void reset_led() {
+    gpio_set_level(LED_BLUE, 0);
+    gpio_set_level(LED_GREEN, 0);
+    gpio_set_level(LED_RED, 0);
+}
+
 static void gatts_event_handler(bt_gatt_event_t *event)
 {
     char instanceID[BT_EDDYSTONE_INSTANCE_LEN * 2] = {0};
@@ -121,6 +127,8 @@ static void gatts_event_handler(bt_gatt_event_t *event)
                 ESP_LOGI(TAG, "Instance ID:");
                 ESP_LOGI(TAG, "%s", instanceID);
                 ESP_LOGI(TAG, "==========================================Eddystone UID End:=======================================================");
+
+                device_type = 2;
 #if 0
                 uint8_t buffer[32] = {0};
 
@@ -155,7 +163,8 @@ static void scanner_event_handler(scanner_event_t *evt)
     switch (evt->id)
     {
     case SCANNER_EVT_UUID_VALID: // process authentication.
-        ESP_LOGI(TAG, "%s", evt->data);
+        // ESP_LOGI(TAG, "%s", evt->data);
+        device_type = 1;
         D6T44L_start_sampling();
         break;
 
@@ -180,6 +189,10 @@ static void d6t44lc_event_handler(d6t44l_event_t *evt)
     case TEMP_EVT_DATA_READY:
         gpio_set_level(LED_BLUE, 0);
         D6T44L_update_temp();
+        telemetry_notify_log(device_type);
+        // double temp = 0.0;
+        // D6T44l_get_data(&temp);
+        // ESP_LOGI(TAG, "Temperature: %04.1f", temp);
         break;
 
     case TEMP_EVT_ERROR:
@@ -235,6 +248,7 @@ static void vl53l1_event_handler(vl53l1_event_t *evt)
 
     case EVT_THRESHOLD_OUTSIDE:
         D6T44L_reset();
+        scanner_app_sleep();
         state = STATE_READY;
         break;
 
@@ -408,13 +422,10 @@ static void i2c_scan(void)
 
 static void blink_task(void *pvParam)
 {
-    int cnt = 0;
-    int delay = 800;
+    int cnt = 0;    
 
-    while (1)
-    {
-        if (state == STATE_READY)
-        {
+    while (1) {
+        if (state == STATE_READY) {
             gpio_set_level(LED_BLUE, cnt % 2);
             cnt++;
         }

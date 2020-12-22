@@ -5,7 +5,7 @@
 #include "scanner_app.h"
 #include "scanner_uart.h"
 
-#define TAG                     "scanner-uart"
+#define TAG   "scanner-uart"
 
 scanner_status_t scanner_uart_init(void) {
     uart_config_t uart_config = {

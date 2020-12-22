@@ -1,23 +1,22 @@
 #include <string.h>
-
-#include "scanner_app.h"
-#include "scanner_uart.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 #include "esp_log.h"
 #include "regex.h"
 
-#include "hw1258.h"
+#include "scanner_uart.h"
 #include "scanner_app.h"
+#include "hw1258.h"
 
-#define TAG "scanner_app"
-#define MUTEX_TIMEOUT_MS 50
-#define MUTEX_LOCK() xSemaphoreTake(scanner_mutex, pdMS_TO_TICKS(MUTEX_TIMEOUT_MS))
-#define MUTEX_UNLOCK() xSemaphoreGive(scanner_mutex)
+#define TAG                 "scanner_app"
+#define MUTEX_TIMEOUT_MS    50
+#define MUTEX_LOCK()        xSemaphoreTake(scanner_mutex, pdMS_TO_TICKS(MUTEX_TIMEOUT_MS))
+#define MUTEX_UNLOCK()      xSemaphoreGive(scanner_mutex)
 
 static SemaphoreHandle_t scanner_mutex;
-static char buffer[50];
+static char buffer[37];
+static char cur_uuid[37];
 static scanner_app_cb app_cb;
 static uint8_t run_flag = 0;
 
@@ -33,35 +32,44 @@ static void scanner_app_task(void *pData)
         if (len > 0)
         {
             MUTEX_LOCK();
-            ESP_LOGI(TAG, "%.*s", len, buffer);
+            // ESP_LOGI(TAG, "len %d", len);
+            // ESP_LOGI(TAG, "%.*s", len, buffer);
             res = regcomp(&regex, "^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}", 1);
             if (res)
             {
                 ESP_LOGE(TAG, "Could not compile regex");
+                scanner_event_t event = {
+                    .id = SCANNER_EVT_FAIL
+                };
+                
+                app_cb(&event);
             }
             res = regexec(&regex, buffer, 0, NULL, 0);
 
             if (!res)
             {
-                scanner_event_t event = {0};
-                event.id = SCANNER_EVT_UUID_VALID;
-                strcpy(event.data, buffer);
-
+                scanner_event_t event = {
+                    .id = SCANNER_EVT_UUID_VALID
+                };
+                strcpy(cur_uuid, buffer);
                 app_cb(&event);
             }
             else if (res == 1)
             {
                 // ESP_LOGE(TAG, "invalid uuid");
-                scanner_event_t event = {0};
-                event.id = SCANNER_EVT_UUID_INVALID;
+                scanner_event_t event = {
+                    .id = SCANNER_EVT_UUID_INVALID
+                };                
                 app_cb(&event);
             }
             else
             {
                 regerror(res, &regex, buffer, len);
 
-                scanner_event_t event = {0};
-                event.id = SCANNER_EVT_FAIL;
+                scanner_event_t event = {
+                    .id = SCANNER_EVT_FAIL
+                };
+                
                 app_cb(&event);
                 // ESP_LOGE(TAG, "Regex match failed: %s", buffer);
             }
@@ -102,13 +110,24 @@ void scanner_app_deinit(void)
     scanner_uart_deinit();
 }
 
-void scanner_app_trigger(void)
+scanner_status_t scanner_app_trigger(void)
 {
     scanner_uart_write_bytes(SCAN, strlen(SCAN));
     vTaskDelay(pdMS_TO_TICKS(10));
-    hw1258_get_expected_response();
+
+    return hw1258_get_expected_response();
 }
 
-void scanner_app_get_data(char *data)
+scanner_status_t scanner_app_sleep(void) {
+    scanner_uart_write_bytes(SLEEP, strlen(SLEEP));
+    vTaskDelay(pdMS_TO_TICKS(10));
+
+    return hw1258_get_expected_response();
+}
+
+void scanner_app_get_data(char* data)
 {
+    MUTEX_LOCK();
+    strcpy(data, cur_uuid);    
+    MUTEX_UNLOCK();
 }

@@ -48,10 +48,10 @@ double pix_data[N_PIXEL];
 
 static uint8_t run_flag = 0;
 static uint8_t start_sampling = 0;
-// static double current_temp = 0.0;
+static double current_temp = 0.0;
 static SemaphoreHandle_t tof_mutex;
 static d6t44l_app_cb user_callback = NULL;
-
+static uint8_t temp_present;
 static double temp[SAMPLING] = {0};
 
 static void updateScreen(double temp)
@@ -206,17 +206,32 @@ static void d6t_app_task(void)
                 }
             }
         }
+        else
+        {
+            temp_present = 0;
+        }
 
         if (count == SAMPLING)
         {
-            d6t44l_event_t event = {0};
-            event.id = TEMP_EVT_DATA_READY;
+            d6t44l_event_t event = {
+                .id = TEMP_EVT_DATA_READY};
+
             user_callback(&event);
             start_sampling = 0;
             count = 0;
         }
     }
     vTaskDelete(NULL);
+}
+
+void D6T44l_get_data(double* dTemp)
+{
+    if (temp_present)
+    {
+        TOF_MUTEX_LOCK();
+        *dTemp = current_temp;
+        TOF_MUTEX_UNLOCK();
+    }
 }
 
 void D6T44L_update_temp(void)
@@ -235,23 +250,23 @@ void D6T44L_update_temp(void)
     }
     // printf("\n");
     htemp += 2.0;
-
+    current_temp = htemp;
+    temp_present = 1;
     updateScreen(htemp);
 
     if (htemp >= TEMPERATURE_THRESHOLD)
     {
         // EVT_TEMP_FAIL
-        d6t44l_event_t event = {0};
-        event.id = TEMP_EVT_TEMP_FAIL;
-        user_callback(&event);        
+        d6t44l_event_t event = {
+            .id = TEMP_EVT_TEMP_FAIL};
+        user_callback(&event);
     }
     else
     {
         //EVT_TEMP_PASS
-        d6t44l_event_t event = {0};
-        event.id = TEMP_EVT_TEMP_PASS;
+        d6t44l_event_t event = {
+            .id = TEMP_EVT_TEMP_PASS};
         user_callback(&event);
-        
     }
     TOF_MUTEX_UNLOCK();
 }
@@ -286,8 +301,7 @@ void D6T44L_app_stop(void)
     updateScreen(0.0);
 }
 
-int D6T44L_init(d6t44l_app_cb app_cb)
-{
+int D6T44L_init(d6t44l_app_cb app_cb) {
     int i;
     tof_mutex = xSemaphoreCreateMutex();
     int err = scan_device();
@@ -300,12 +314,11 @@ int D6T44L_init(d6t44l_app_cb app_cb)
 
     user_callback = app_cb;
 
-    for (i = 0; i < N_PIXEL; i++)
-    {
+    for (i = 0; i < N_PIXEL; i++) {
         data_calib_3[i] = (data_3[i] - data_1[i]) * ((double)Txh - (double)Txl_1) / (data_2[i] - data_1[i]) + (double)Txl_1;
     }
 
+    temp_present = 0;
     D6T44L_reset();
-
     return err;
 }

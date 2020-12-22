@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+
+
 typedef enum {
     SCANNER_STATUS_ERR = -1,
     SCANNER_STATUS_OK   = 0,
@@ -33,6 +35,8 @@ void scanner_app_deinit(void);
 
 void scanner_app_get_data(char* data);
 
-void scanner_app_trigger(void);
+scanner_status_t scanner_app_trigger(void);
+
+scanner_status_t scanner_app_sleep(void);
 
 #endif /* COMPONENTS_SCANNER_SCANNER_APP */

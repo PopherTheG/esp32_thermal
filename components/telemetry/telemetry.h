@@ -10,6 +10,7 @@ typedef enum {
 
 typedef enum
 {
+    TELEMETRY_TASK_STOP = -1,
     TELEMETRY_TASK_LOG,
 } telemetry_msg_id_t;
 
@@ -26,5 +27,7 @@ void telemetry_deinit(void);
 void telemetry_start(uint64_t* id);
 
 void telemetry_stop(void);
+
+telemetry_err_t telemetry_notify_log(uint8_t device_type);
 
 #endif /* COMPONENTS_TELEMETRY_TELEMETRY */
