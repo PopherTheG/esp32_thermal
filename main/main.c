@@ -29,24 +29,19 @@
 #include "bluetooth_api.h"
 #include "telemetry_protocol.h"
 #include "scanner_app.h"
-
-#define VL53L1
-
-#ifdef VL53L1
-#include "vl53l1.h"
-#else
 #include "vl53l3cx.h"
-#endif
 
 #define TAG "main-app"
 #define I2C_MASTER_PORT 0
-// #define ONLINE
+#define ONLINE
 
 #define PORT 1883
 #ifdef ONLINE
 #define HOST "52.221.96.155"
+#define PORT 2883
 #else
 #define HOST "192.168.10.4"
+#define PORT 1883
 #endif
 
 #define LED_BLUE 18
@@ -131,22 +126,18 @@ static void gatts_event_handler(bt_gatt_event_t *event)
                 device_type = 2;
 #if 0
                 uint8_t buffer[32] = {0};
-
                 telemetry_t *ble_telemetry = (telemetry_t *)buffer;
-
                 ble_telemetry->type = TELEMETRY_TYPE_AUTH;
                 ble_telemetry->device_type = TELEMETRY_DEVICE_BLE;
                 ble_telemetry->reqNo = reqNo;
                 ble_telemetry->serial = strtoull(serial, NULL, 0);
-
                 // buffer[0] = 1;
                 memcpy(&ble_telemetry->namespaceID, event->client.event.eddystone.frame.uid.namespace, 10);
                 memcpy(&ble_telemetry->instanceID, event->client.event.eddystone.frame.uid.instance, 6);
-
                 uint16_t *crc = _CRC16(buffer, sizeof(ble_telemetry), 0xffff, 0x00);
                 memcpy(buffer + sizeof(telemetry_t), &crc, 2);
                 cloud_api_send(&buffer, sizeof(telemetry_t) + 2);
-
+                
                 sent = 1;
 #endif
             }
@@ -236,39 +227,20 @@ static void d6t44lc_event_handler(d6t44l_event_t *evt)
     }
 }
 
-static void vl53l1_event_handler(vl53l1_event_t *evt)
-{
-    switch (evt->id)
-    {
-    case EVT_THRESHOLD_INSIDE:
-        state = STATE_SCAN;
-        gpio_set_level(LED_BLUE, 1);
-        scanner_app_trigger();
-        break;
-
-    case EVT_THRESHOLD_OUTSIDE:
-        D6T44L_reset();
-        scanner_app_sleep();
-        state = STATE_READY;
-        break;
-
-    default:
-
-        break;
-    }
-}
-
-#ifndef VL53L1
 static void vl53l3cx_event_handler(vl53l3cx_event_t *evt)
 {
     switch (evt->id)
     {
     case TOF_EVT_THRESHOLD_INSIDE:
-        D6T44L_start_sampling();
+        state = STATE_SCAN;
+        gpio_set_level(LED_BLUE, 1);
+        scanner_app_trigger();
         break;
 
     case TOF_EVT_THRESHOLD_OUTSIDE:
         D6T44L_reset();
+        scanner_app_sleep();
+        state = STATE_READY;
         break;
 
     default:
@@ -276,7 +248,6 @@ static void vl53l3cx_event_handler(vl53l3cx_event_t *evt)
         break;
     }
 }
-#endif
 
 static void system_info_task(void *pdata)
 {
@@ -478,11 +449,9 @@ void app_main()
 
     esp_efuse_mac_get_default(chipId);
     sprintf(serial, "%d%d%d%d%d%d", chipId[0], chipId[1], chipId[2], chipId[3], chipId[4], chipId[5]);
-
     ESP_LOGI(TAG, "%s", serial);
 
     ESP_LOGI(TAG, "Long serial: %lld", strtoll(serial, NULL, 0));
-
     initialise_wifi(smart_wifi_cb);
 
     telemetry_init();
@@ -493,7 +462,6 @@ void app_main()
     // printf("%s", bluetooth_name);
     bluetooth_register_gatt_handler(gatts_event_handler);
     bluetooth_init(bluetooth_name);
-#endif
 
     if (scanner_app_init(scanner_event_handler) == SCANNER_STATUS_OK)
     {
@@ -510,20 +478,16 @@ void app_main()
     {
         D6T44L_app_run();
     }
-#ifdef VL53L1
-    if (vl53l1_init(vl53l1_event_handler) == ESP_OK)
-    {
-        vl53l1_start_app();
-    }
-#else
+#endif
+
     if (init_vl53l3cx(vl53l3cx_event_handler) == VL53LX_ERROR_NONE)
     {
         vl53l3cx_start_app();
     }
-#endif
 
     xTaskCreate(system_info_task, "sys-info", 2048, NULL, 1, NULL);
-    xTaskCreate(blink_task, "blink", 1024, NULL, 5, NULL);
+    // xTaskCreate(blink_task, "blink", 1024, NULL, 5, NULL);
+
     uint64_t id = strtoull(serial, NULL, 0);
     telemetry_start(&id);
 }
