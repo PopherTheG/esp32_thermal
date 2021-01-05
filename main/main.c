@@ -39,7 +39,6 @@
 
 #define ONLINE
 
-#define PORT 1883
 #ifdef ONLINE
 #define HOST "52.221.96.155"
 #define PORT 2883
@@ -438,19 +437,18 @@ void app_main()
 {
     ESP_LOGI(TAG, "Start!");
 
-    system_init();    
-
+    system_init();
     // io_init();
-    i2c_scan();    
+    i2c_scan();
 
     esp_efuse_mac_get_default(chipId);
     sprintf(serial, "%d%d%d%d%d%d", chipId[0], chipId[1], chipId[2], chipId[3], chipId[4], chipId[5]);
     ESP_LOGI(TAG, "%s", serial);
 
     ESP_LOGI(TAG, "Long serial: %lld", strtoll(serial, NULL, 0));
-    // initialise_wifi(smart_wifi_cb);
+    initialise_wifi(smart_wifi_cb);
 
-    // telemetry_init();
+    telemetry_init();
 
 #if 0
     char bluetooth_name[23] = {0};
@@ -484,6 +482,6 @@ void app_main()
     xTaskCreate(system_info_task, "sys-info", 2048, NULL, 1, NULL);
     // xTaskCreate(blink_task, "blink", 1024, NULL, 5, NULL);
 
-    // uint64_t id = strtoull(serial, NULL, 0);
-    // telemetry_start(&id);
+    uint64_t id = strtoull(serial, NULL, 0);
+    telemetry_start(&id);
 }
