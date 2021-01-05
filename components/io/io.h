@@ -17,4 +17,6 @@ void io_set_relay(uint8_t level);
 
 uint8_t io_get_relay(void);
 
+void io_vl53l3_pin_enable(uint8_t en);
+
 #endif /* COMPONENTS_IO_IO */

@@ -20,7 +20,7 @@
 #include "esp_attr.h"
 #include "esp_event.h"
 
-#include "telemetry.h"
+#include "telemetry.h"  
 #include "smart_wifi.h"
 #include "ssd1306.h"
 
@@ -30,9 +30,13 @@
 #include "telemetry_protocol.h"
 #include "scanner_app.h"
 #include "vl53l3cx.h"
+#include "io.h"
 
 #define TAG "main-app"
 #define I2C_MASTER_PORT 0
+#define I2C_SDA         27
+#define I2C_SCL         14
+
 #define ONLINE
 
 #define PORT 1883
@@ -43,11 +47,6 @@
 #define HOST "192.168.10.4"
 #define PORT 1883
 #endif
-
-#define LED_BLUE 18
-#define LED_GREEN 33
-#define LED_RED 25
-#define BUZZER_IO 19
 
 typedef enum {
     STATE_READY,
@@ -95,9 +94,9 @@ static void convert_to_hex_str(char *str, uint8_t *val, size_t len)
 }
 
 static void reset_led() {
-    gpio_set_level(LED_BLUE, 0);
-    gpio_set_level(LED_GREEN, 0);
-    gpio_set_level(LED_RED, 0);
+    // gpio_set_level(LED_BLUE, 0);
+    // gpio_set_level(LED_GREEN, 0);
+    // gpio_set_level(LED_RED, 0);
 }
 
 static void gatts_event_handler(bt_gatt_event_t *event)
@@ -178,7 +177,7 @@ static void d6t44lc_event_handler(d6t44l_event_t *evt)
     switch (evt->id)
     {
     case TEMP_EVT_DATA_READY:
-        gpio_set_level(LED_BLUE, 0);
+        // gpio_set_level(LED_BLUE, 0);
         D6T44L_update_temp();
         telemetry_notify_log(device_type);
         // double temp = 0.0;
@@ -191,35 +190,35 @@ static void d6t44lc_event_handler(d6t44l_event_t *evt)
         break;
 
     case TEMP_EVT_TEMP_PASS:
-        gpio_set_level(LED_GREEN, 1);
-        gpio_set_level(BUZZER_IO, 1);
-        vTaskDelay(250 / portTICK_RATE_MS);
-        gpio_set_level(BUZZER_IO, 0);
+        // gpio_set_level(LED_GREEN, 1);
+        // gpio_set_level(BUZZER_IO, 1);
+        // vTaskDelay(250 / portTICK_RATE_MS);
+        // gpio_set_level(BUZZER_IO, 0);
         break;
     case TEMP_EVT_RESET:
         // gpio_set_level(LED_BLUE, 1);
-        gpio_set_level(LED_GREEN, 0);
-        gpio_set_level(LED_RED, 0);
+        // gpio_set_level(LED_GREEN, 0);
+        // gpio_set_level(LED_RED, 0);
         state = STATE_READY;
         break;
 
     case TEMP_EVT_TEMP_FAIL:
-        gpio_set_level(LED_RED, 1);
-        gpio_set_level(BUZZER_IO, 1);
-        vTaskDelay(250 / portTICK_RATE_MS);
-        gpio_set_level(BUZZER_IO, 0);
-        vTaskDelay(250 / portTICK_RATE_MS);
-        gpio_set_level(BUZZER_IO, 1);
-        vTaskDelay(250 / portTICK_RATE_MS);
-        gpio_set_level(BUZZER_IO, 0);
-        vTaskDelay(250 / portTICK_RATE_MS);
-        gpio_set_level(BUZZER_IO, 1);
-        vTaskDelay(250 / portTICK_RATE_MS);
-        gpio_set_level(BUZZER_IO, 0);
-        vTaskDelay(250 / portTICK_RATE_MS);
-        gpio_set_level(BUZZER_IO, 1);
-        vTaskDelay(250 / portTICK_RATE_MS);
-        gpio_set_level(BUZZER_IO, 0);
+        // gpio_set_level(LED_RED, 1);
+        // gpio_set_level(BUZZER_IO, 1);
+        // vTaskDelay(250 / portTICK_RATE_MS);
+        // gpio_set_level(BUZZER_IO, 0);
+        // vTaskDelay(250 / portTICK_RATE_MS);
+        // gpio_set_level(BUZZER_IO, 1);
+        // vTaskDelay(250 / portTICK_RATE_MS);
+        // gpio_set_level(BUZZER_IO, 0);
+        // vTaskDelay(250 / portTICK_RATE_MS);
+        // gpio_set_level(BUZZER_IO, 1);
+        // vTaskDelay(250 / portTICK_RATE_MS);
+        // gpio_set_level(BUZZER_IO, 0);
+        // vTaskDelay(250 / portTICK_RATE_MS);
+        // gpio_set_level(BUZZER_IO, 1);
+        // vTaskDelay(250 / portTICK_RATE_MS);
+        // gpio_set_level(BUZZER_IO, 0);
         break;
 
     default:
@@ -233,7 +232,7 @@ static void vl53l3cx_event_handler(vl53l3cx_event_t *evt)
     {
     case TOF_EVT_THRESHOLD_INSIDE:
         state = STATE_SCAN;
-        gpio_set_level(LED_BLUE, 1);
+        // gpio_set_level(LED_BLUE, 1);
         scanner_app_trigger();
         break;
 
@@ -375,6 +374,8 @@ static uint8_t i2c_slave_knock(uint8_t i2c_port, uint8_t slave_addr)
 
 static void i2c_scan(void)
 {
+    ESP_LOGI(TAG, "Scanning I2C.");
+
     uint8_t slave_count = 0;
     vTaskDelay(500 / portTICK_RATE_MS);
     for (int slave_addr = 0; slave_addr < 127; slave_addr++)
@@ -397,7 +398,7 @@ static void blink_task(void *pvParam)
 
     while (1) {
         if (state == STATE_READY) {
-            gpio_set_level(LED_BLUE, cnt % 2);
+            // gpio_set_level(LED_BLUE, cnt % 2);
             cnt++;
         }
         vTaskDelay(800 / portTICK_PERIOD_MS);
@@ -421,8 +422,8 @@ static void system_init(void)
 
     i2c_config_t i2c_master_config = {
         .mode = I2C_MODE_MASTER,
-        .sda_io_num = 21,
-        .scl_io_num = 22,
+        .sda_io_num = I2C_SDA,
+        .scl_io_num = I2C_SCL,
         .sda_pullup_en = GPIO_PULLUP_ENABLE,
         .scl_pullup_en = GPIO_PULLUP_ENABLE,
         .master = {
@@ -437,24 +438,19 @@ void app_main()
 {
     ESP_LOGI(TAG, "Start!");
 
-    system_init();
-    i2c_scan();
+    system_init();    
 
-    gpio_set_direction(LED_BLUE, GPIO_MODE_OUTPUT);
-    gpio_set_direction(LED_RED, GPIO_MODE_OUTPUT);
-    gpio_set_direction(LED_GREEN, GPIO_MODE_OUTPUT);
-
-    gpio_set_direction(BUZZER_IO, GPIO_MODE_OUTPUT);
-    gpio_set_level(BUZZER_IO, 0);
+    // io_init();
+    i2c_scan();    
 
     esp_efuse_mac_get_default(chipId);
     sprintf(serial, "%d%d%d%d%d%d", chipId[0], chipId[1], chipId[2], chipId[3], chipId[4], chipId[5]);
     ESP_LOGI(TAG, "%s", serial);
 
     ESP_LOGI(TAG, "Long serial: %lld", strtoll(serial, NULL, 0));
-    initialise_wifi(smart_wifi_cb);
+    // initialise_wifi(smart_wifi_cb);
 
-    telemetry_init();
+    // telemetry_init();
 
 #if 0
     char bluetooth_name[23] = {0};
@@ -480,14 +476,14 @@ void app_main()
     }
 #endif
 
-    if (init_vl53l3cx(vl53l3cx_event_handler) == VL53LX_ERROR_NONE)
-    {
-        vl53l3cx_start_app();
-    }
+    // if (init_vl53l3cx(vl53l3cx_event_handler) == VL53LX_ERROR_NONE)
+    // {
+    //     vl53l3cx_start_app();
+    // }
 
     xTaskCreate(system_info_task, "sys-info", 2048, NULL, 1, NULL);
     // xTaskCreate(blink_task, "blink", 1024, NULL, 5, NULL);
 
-    uint64_t id = strtoull(serial, NULL, 0);
-    telemetry_start(&id);
+    // uint64_t id = strtoull(serial, NULL, 0);
+    // telemetry_start(&id);
 }
