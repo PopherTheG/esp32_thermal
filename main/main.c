@@ -40,7 +40,7 @@
 
 #define TAG "main-app"
 #define I2C_MASTER_PORT 0
-// #define ONLINE
+#define ONLINE
 
 #define PORT 1883
 #ifdef ONLINE
