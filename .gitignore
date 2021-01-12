@@ -72,3 +72,4 @@ dkms.conf
 
 build/
 .vscode/
+cfg_part.bin

@@ -1,8 +1,9 @@
+#include <string.h>
+#include <stdlib.h>
+
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include "driver/i2c.h"
-#include <string.h>
-#include <stdlib.h>
 #include "vl53lx_api.h"
 #include "vl53l3cx.h"
 
@@ -101,17 +102,16 @@ void vl53l3cx_stop_app(void)
 
 VL53LX_Error init_vl53l3cx(vl53l3cx_app_cb app_cb)
 {
-    gpio_set_direction(GPIO_NUM_32, GPIO_MODE_OUTPUT);
-    gpio_set_level(GPIO_NUM_32, 0);
+    // gpio_set_direction(GPIO_NUM_32, GPIO_MODE_OUTPUT);
+    // gpio_set_level(GPIO_NUM_32, 0);
     Dev->i2c_slave_address = 0x29;
-    gpio_set_level(GPIO_NUM_32, 1);
+    // gpio_set_level(GPIO_NUM_32, 1);
 
     user_callbacks = app_cb;
 
     VL53LX_Error status = VL53LX_ERROR_NONE;
 
     // VL53LX_SetDeviceAddress();
-
     // ESP_LOGI(TAG, "Old address: %x", Dev->i2c_slave_address);
 
     status = VL53LX_WaitDeviceBooted(Dev);

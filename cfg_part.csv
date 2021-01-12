@@ -1,0 +1,17 @@
+# Configuration Partition Structure
+key,type,encoding,value
+#REMOTE COMMAND CONFIGURATIONS
+command-cfg,namespace,,
+pass_hash,data,hex2bin,EF92B778BAFE771E89245B89ECBC08A44A4E166C06659911881F383D4473E94F
+# OTA UPDATE CONFIGURATIONS
+ota-cfg,namespace,,
+url,data,string,https://jomerfiles.s3-ap-southeast-1.amazonaws.com/aim_firmware/template-app.bin
+# WIFI CONFIGURATIONS
+wifi-cfg,namespace,,
+ssid,data,string,"hardware"
+password,data,string,"greentealami"
+#CLOUD CONFIGURATIONS
+cloud-cfg,namespace,,
+host,data,string,"52.221.11.59"
+port,data,u16,2883
+conntype,data,u8,0
