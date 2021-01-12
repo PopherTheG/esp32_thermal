@@ -32,7 +32,7 @@ int8_t I2C_Read(uint8_t byte_count, uint8_t slave_addr, uint8_t reg_addr, uint8_
             I2C_ACK_EN);
     i2c_master_read( cmd, reg_data, byte_count, I2C_MASTER_LAST_NACK );
     i2c_master_stop( cmd );
-    i2c_err = i2c_master_cmd_begin( I2C_NUM_1, cmd, 100 );
+    i2c_err = i2c_master_cmd_begin( I2C_NUM_0, cmd, 100 );
     i2c_cmd_link_delete( cmd );
 
     return i2c_err == ESP_OK ? 0:-1;
@@ -52,7 +52,7 @@ uint8_t I2C_Read_Byte(uint8_t slave_addr, uint8_t reg_addr)
             I2C_ACK_EN);
     i2c_master_read_byte( cmd, &reg_data,  I2C_MASTER_LAST_NACK );
     i2c_master_stop( cmd );
-    i2c_master_cmd_begin( I2C_NUM_1, cmd, 100 );
+    i2c_master_cmd_begin( I2C_NUM_0, cmd, 100 );
     i2c_cmd_link_delete( cmd );
 
     return reg_data;

@@ -1,0 +1,1 @@
+python D:\hardware\esp\esp-idf\components\nvs_flash\nvs_partition_generator\nvs_partition_gen.py generate cfg_part.csv cfg_part.bin 0x3000 --version 2

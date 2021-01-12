@@ -15,7 +15,8 @@
 
 #define TAG "wifi-app"
 
-#define NVS_PARTITION_NAMESPACE "storage"
+#define NVS_PARTITION           "cfg_part"
+#define NVS_PARTITION_NAMESPACE "wifi-cfg"
 #define NVS_KEY_SSID            "ssid"
 #define NVS_KEY_PASSWORD        "password"
 
@@ -34,7 +35,7 @@ static void save_config_to_nvs(wifi_config_t *config)
     esp_err_t err;
     nvs_handle_t handle;
 
-    err = nvs_open(NVS_PARTITION_NAMESPACE, NVS_READWRITE, &handle);
+    err = nvs_open_from_partition(NVS_PARTITION, NVS_PARTITION_NAMESPACE, NVS_READWRITE, &handle);    
     ESP_ERROR_CHECK_WITHOUT_ABORT(err);
 
     err = nvs_set_str(handle, NVS_KEY_SSID, (char *)config->sta.ssid);
@@ -52,7 +53,8 @@ static esp_err_t load_config_from_nvs(wifi_config_t *config)
     nvs_handle_t handle;
 
     size_t len = 32;
-    err = nvs_open(NVS_PARTITION_NAMESPACE, NVS_READWRITE, &handle);
+    err = nvs_open_from_partition(NVS_PARTITION, NVS_PARTITION_NAMESPACE, NVS_READWRITE, &handle);    
+    // err = nvs_open(NVS_PARTITION_NAMESPACE, NVS_READWRITE, &handle);
     ESP_ERROR_CHECK_WITHOUT_ABORT(err);
 
     err = nvs_get_str(handle, NVS_KEY_SSID, (char *)config->sta.ssid, &len);
