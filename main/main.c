@@ -20,7 +20,7 @@
 #include "esp_attr.h"
 #include "esp_event.h"
 
-#include "telemetry.h"  
+#include "telemetry.h"
 #include "smart_wifi.h"
 #include "ssd1306.h"
 
@@ -31,11 +31,12 @@
 #include "scanner_app.h"
 #include "vl53l3cx.h"
 #include "io.h"
+#include "ota.h"
 
 #define TAG "main-app"
-#define I2C_MASTER_PORT 0
-#define I2C_SDA         27
-#define I2C_SCL         14
+#define I2C_MASTER_PORT I2C_NUM_0
+#define I2C_SDA 27
+#define I2C_SCL 14
 
 #define ONLINE
 
@@ -92,7 +93,8 @@ static void convert_to_hex_str(char *str, uint8_t *val, size_t len)
     sprintf(str, "%02x%02x%02x%02x%02x%02x", val[0], val[1], val[2], val[3], val[4], val[5]);
 }
 
-static void reset_led() {
+static void reset_led()
+{
     // gpio_set_level(LED_BLUE, 0);
     // gpio_set_level(LED_GREEN, 0);
     // gpio_set_level(LED_RED, 0);
@@ -129,7 +131,7 @@ static void gatts_event_handler(bt_gatt_event_t *event)
                 ble_telemetry->device_type = TELEMETRY_DEVICE_BLE;
                 ble_telemetry->reqNo = reqNo;
                 ble_telemetry->serial = strtoull(serial, NULL, 0);
-                // buffer[0] = 1;
+                // buffer[0] = 1;80
                 memcpy(&ble_telemetry->namespaceID, event->client.event.eddystone.frame.uid.namespace, 10);
                 memcpy(&ble_telemetry->instanceID, event->client.event.eddystone.frame.uid.instance, 6);
                 uint16_t *crc = _CRC16(buffer, sizeof(ble_telemetry), 0xffff, 0x00);
@@ -283,6 +285,11 @@ static void cloud_cb(cloud_event_t *evt)
     {
     case CLOUD_EVT_CONNECT:
         ESP_LOGI(TAG, "CLOUD_EVT_CONNECT");
+
+        const char* ver = ota_get_version();
+        
+        ESP_LOGI(TAG, "Current Version: %s", ver);
+        ESP_LOGI(TAG, "OTA URL: %s", ota_get_url());
         // Init Bluetooth
         break;
 
@@ -304,7 +311,7 @@ static void cloud_cb(cloud_event_t *evt)
         break;
 
     default:
-        ESP_LOGI(TAG, "UNKNOW_CLOUD_EVENT");
+        ESP_LOGI(TAG, "UNKNOW_CLOUD_EVENT %d", evt->id);
         break;
     }
 }
@@ -318,13 +325,12 @@ static void connect_to_cloud(void)
 
     if (cloud_ret == CLOUD_RET_OK)
     {
-        ESP_LOGI(TAG, "Cloud Connected\r\n");        
+        ESP_LOGI(TAG, "Cloud Connected\r\n");
     }
     else if (cloud_ret == CLOUD_RET_UNKNOWN_PROTOCOL)
     {
         ESP_LOGI(TAG, "Cloud Unknown Protocol\r\n");
-        
-    } 
+    }
 }
 
 static void smart_wifi_cb(smart_wifi_event_t *evt)
@@ -333,7 +339,7 @@ static void smart_wifi_cb(smart_wifi_event_t *evt)
     {
     case EVT_CONNECT:
         connect_to_cloud();
-        
+
         if (obtain_time == 1)
         {
             obtain_time = 0;
@@ -359,6 +365,19 @@ static void smart_wifi_cb(smart_wifi_event_t *evt)
     }
 }
 
+static esp_err_t i2c_master_driver_initialize(void)
+{
+    i2c_config_t i2c_master_config = {
+        .mode = I2C_MODE_MASTER,
+        .sda_io_num = I2C_SDA,
+        .scl_io_num = I2C_SCL,
+        .sda_pullup_en = GPIO_PULLUP_ENABLE,
+        .scl_pullup_en = GPIO_PULLUP_ENABLE,
+        .master.clk_speed = 400000};
+
+    return i2c_param_config(I2C_MASTER_PORT, &i2c_master_config);
+}
+
 static uint8_t i2c_slave_knock(uint8_t i2c_port, uint8_t slave_addr)
 {
     esp_err_t err;
@@ -366,17 +385,58 @@ static uint8_t i2c_slave_knock(uint8_t i2c_port, uint8_t slave_addr)
     i2c_master_start(cmd);
     i2c_master_write_byte(cmd, (slave_addr << 1) | I2C_MASTER_WRITE, 1);
     i2c_master_stop(cmd);
-    err = i2c_master_cmd_begin(i2c_port, cmd, 100);
+    err = i2c_master_cmd_begin(i2c_port, cmd, 50 / portTICK_PERIOD_MS);
     i2c_cmd_link_delete(cmd);
     return err == ESP_OK;
 }
 
-static void i2c_scan(void)
+static void i2c_scan(void *pdata)
 {
-    ESP_LOGI(TAG, "Scanning I2C.");
+    while (1)
+    {
+        ESP_LOGI(TAG, "Scanning I2C.");
+        i2c_driver_install(I2C_MASTER_PORT, I2C_MODE_MASTER, 0, 0, 0);
+        i2c_master_driver_initialize();
 
-    uint8_t slave_count = 0;
-    vTaskDelay(500 / portTICK_RATE_MS);
+        uint8_t slave_count = 0;
+        uint8_t address;
+
+        printf("     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f\r\n");
+        for (int i = 0; i < 128; i += 16)
+        {
+            printf("%02x: ", i);
+            for (int j = 0; j < 16; j++)
+            {
+                address = i + j;
+                i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+                i2c_master_start(cmd);
+                i2c_master_write_byte(cmd, (address << 1) | I2C_MASTER_WRITE, 1);
+                i2c_master_stop(cmd);
+                esp_err_t ret = i2c_master_cmd_begin(I2C_MASTER_PORT, cmd, 50 / portTICK_RATE_MS);
+                i2c_cmd_link_delete(cmd);
+                if (ret == ESP_OK)
+                {
+                    printf("%02x ", address);
+                    slave_count++;
+                }
+                else if (ret == ESP_ERR_TIMEOUT)
+                {
+                    printf("UU ");
+                }
+                else
+                {
+                    printf("-- ");
+                }
+            }
+            printf("\r\n");
+        }
+
+        ESP_LOGI(TAG, "Slave Count %d", slave_count);
+        i2c_driver_delete(I2C_MASTER_PORT);
+        vTaskDelay(3000 / portTICK_RATE_MS);
+    }
+
+#if 0
     for (int slave_addr = 0; slave_addr < 127; slave_addr++)
     {
         if (i2c_slave_knock(I2C_MASTER_PORT, slave_addr))
@@ -387,21 +447,7 @@ static void i2c_scan(void)
             slave_count++;
         }
     }
-
-    ESP_LOGI(TAG, "Slave Count %d", slave_count);
-}
-
-static void blink_task(void *pvParam)
-{
-    int cnt = 0;    
-
-    while (1) {
-        if (state == STATE_READY) {
-            // gpio_set_level(LED_BLUE, cnt % 2);
-            cnt++;
-        }
-        vTaskDelay(800 / portTICK_PERIOD_MS);
-    }
+#endif
 }
 
 static void system_init(void)
@@ -415,6 +461,7 @@ static void system_init(void)
     }
 
     ESP_ERROR_CHECK(err);
+    ESP_ERROR_CHECK(nvs_flash_init_partition("cfg_part"));
 
     setenv("TZ", "PST-8", 1);
     tzset();
@@ -426,11 +473,12 @@ static void system_init(void)
         .sda_pullup_en = GPIO_PULLUP_ENABLE,
         .scl_pullup_en = GPIO_PULLUP_ENABLE,
         .master = {
-            .clk_speed = 100000,
+            .clk_speed = 150000,
         }};
 
     i2c_param_config(I2C_MASTER_PORT, &i2c_master_config);
-    err = i2c_driver_install(I2C_MASTER_PORT, i2c_master_config.mode, 0, 0, 0);
+
+    err = i2c_driver_install(I2C_MASTER_PORT, I2C_MODE_MASTER, 0, 0, 0);
 }
 
 void app_main()
@@ -438,8 +486,9 @@ void app_main()
     ESP_LOGI(TAG, "Start!");
 
     system_init();
-    // io_init();
-    i2c_scan();
+
+    io_init();
+    // i2c_scan();
 
     esp_efuse_mac_get_default(chipId);
     sprintf(serial, "%d%d%d%d%d%d", chipId[0], chipId[1], chipId[2], chipId[3], chipId[4], chipId[5]);
@@ -480,8 +529,9 @@ void app_main()
     // }
 
     xTaskCreate(system_info_task, "sys-info", 2048, NULL, 1, NULL);
-    // xTaskCreate(blink_task, "blink", 1024, NULL, 5, NULL);
+    // xTaskCreate(i2c_scan, "i2c-scan", 1024 * 2, NULL, 5, NULL);
 
     uint64_t id = strtoull(serial, NULL, 0);
     telemetry_start(&id);
+    
 }
